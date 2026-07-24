@@ -1,6 +1,7 @@
-import { GamePhase, PlayerConfig } from '../../utils/constants';
-import { AIStrategy } from '../ai/types';
-import { RandomProvider } from './random';
+import { GamePhase } from '../../utils/constants';
+import type { AIStrategy } from '../ai/types';
+import type { PlayerConfig } from '../models/types';
+import type { RandomProvider } from './random';
 import { RoundManager } from './round-manager';
 
 export interface GameRunnerOptions {
@@ -12,8 +13,10 @@ export interface GameRunnerOptions {
 export class GameRunner {
   private manager: RoundManager;
   private strategy: AIStrategy;
+  private options: GameRunnerOptions;
 
-  constructor(private options: GameRunnerOptions) {
+  constructor(options: GameRunnerOptions) {
+    this.options = options;
     this.manager = new RoundManager(options.random);
     this.strategy = options.strategyFactory(options.random);
   }

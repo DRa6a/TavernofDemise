@@ -1,4 +1,4 @@
-import { GameEvent } from '../models/types';
+import type { GameEvent } from '../models/types';
 
 export interface NetworkTransport {
   connect(roomId: string): Promise<void>;

@@ -1,4 +1,4 @@
-import { NetworkTransport } from './types';
+import type { NetworkTransport } from './types';
 
 export class LocalTransport implements NetworkTransport {
   async connect(): Promise<void> {}

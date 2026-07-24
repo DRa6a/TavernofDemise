@@ -1,4 +1,4 @@
-import { Card, DeckConfig } from '../models/types';
+import type { Card, DeckConfig } from '../models/types';
 import { CardPhase, ZODIAC } from '../../utils/constants';
 
 export class DeckBuilder {

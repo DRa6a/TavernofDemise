@@ -1,24 +1,26 @@
 import {
-  Card,
   CardPhase,
+} from '../models/types';
+import type {
+  Card,
   GameEvent,
   GameState,
+  Player,
   PlayerConfig,
 } from '../models/types';
 import { DivineBeast as DivineBeastEnum, GamePhase, HAND_SIZE, MAX_PLAYERS, MIN_PLAYERS } from '../../utils/constants';
 import { DeckBuilder } from './deck-builder';
-import { RandomProvider } from './random';
+import type { RandomProvider } from './random';
 import { RuleEngine } from './rule-engine';
 import { Shuffler } from './shuffler';
 
 export class RoundManager {
   private state: GameState;
   private ruleEngine: RuleEngine;
+  private random: RandomProvider;
 
-  constructor(
-    private random: RandomProvider,
-    initialState?: GameState,
-  ) {
+  constructor(random: RandomProvider, initialState?: GameState) {
+    this.random = random;
     this.ruleEngine = new RuleEngine();
     this.state = initialState ?? this.createInitialState();
   }

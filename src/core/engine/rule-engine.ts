@@ -1,15 +1,6 @@
-import { Card, CardPhase, DivineBeast, GameState, Player } from '../models/types';
+import { CardPhase } from '../models/types';
+import type { Card, ChallengeResult, DivineBeast, GameState, LifeDeathResult, Player } from '../models/types';
 import { DEATH_FACE, MAX_PLAY_CARDS, MIN_PLAY_CARDS } from '../../utils/constants';
-
-export interface ChallengeResult {
-  isFake: boolean;
-  challengerWins: boolean;
-}
-
-export interface LifeDeathResult {
-  face: DivineBeast;
-  isDead: boolean;
-}
 
 export class RuleEngine {
   canPlay(player: Player, cards: Card[], state: GameState): boolean {
@@ -50,7 +41,7 @@ export class RuleEngine {
     return { isFake, challengerWins };
   }
 
-  resolveDice(player: Player, face: DivineBeast): LifeDeathResult {
+  resolveDice(_player: Player, face: DivineBeast): LifeDeathResult {
     const isDead = face === DEATH_FACE;
     return { face, isDead };
   }

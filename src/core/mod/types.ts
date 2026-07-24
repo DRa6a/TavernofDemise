@@ -1,5 +1,5 @@
-import { Card } from '../models/types';
-import { RuleEngine } from '../engine/rule-engine';
+import type { Card } from '../models/types';
+import type { RuleEngine } from '../engine/rule-engine';
 
 export interface GameMod {
   id: string;

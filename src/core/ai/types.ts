@@ -1,4 +1,4 @@
-import { Card, GameState, Player } from '../models/types';
+import type { Card, GameState, Player } from '../models/types';
 
 export interface AIContext {
   player: Player;

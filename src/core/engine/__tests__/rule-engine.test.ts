@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RuleEngine } from '../rule-engine';
-import { Card, GameState, Player } from '../../models/types';
+import type { Card, GameState, Player } from '../../models/types';
 import { CardPhase, GamePhase } from '../../../utils/constants';
 
 function createCard(phase: CardPhase, id: string, zodiac?: string): Card {

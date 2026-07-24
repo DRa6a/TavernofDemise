@@ -1,12 +1,15 @@
-import { AIStrategy, AIContext } from './types';
-import { RandomProvider } from '../engine/random';
-import { Card } from '../models/types';
+import type { AIStrategy, AIContext } from './types';
+import type { RandomProvider } from '../engine/random';
+import type { Card } from '../models/types';
 
 export class BaseStrategy implements AIStrategy {
   name = '基础策略';
   difficulty = 1;
+  private random: RandomProvider;
 
-  constructor(private random: RandomProvider) {}
+  constructor(random: RandomProvider) {
+    this.random = random;
+  }
 
   decidePlay(context: AIContext): Card[] {
     const { player } = context;

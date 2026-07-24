@@ -1,5 +1,5 @@
-import { GameMod, ModLoader } from './types';
-import { Card } from '../models/types';
+import type { GameMod, ModLoader } from './types';
+import type { Card } from '../models/types';
 import { RuleEngine } from '../engine/rule-engine';
 
 export class DefaultModLoader implements ModLoader {

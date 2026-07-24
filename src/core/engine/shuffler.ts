@@ -1,8 +1,12 @@
-import { Card } from '../models/types';
-import { RandomProvider } from './random';
+import type { Card } from '../models/types';
+import type { RandomProvider } from './random';
 
 export class Shuffler {
-  constructor(private random: RandomProvider) {}
+  private random: RandomProvider;
+
+  constructor(random: RandomProvider) {
+    this.random = random;
+  }
 
   shuffle(deck: Card[]): Card[] {
     return this.random.shuffle(deck);
