@@ -532,9 +532,174 @@
   color: #16a34a;
 }
 
-.dice-rolled {
+/* 真牌横幅 */
+.truth-banner {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  gap: 2px;
+}
+
+.truth-label {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.truth-phase {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--phase-color, var(--text-h));
+  text-shadow: 0 0 12px var(--phase-color, transparent);
+  line-height: 1.1;
+}
+
+.dice-remaining {
   font-size: 12px;
   color: var(--text);
   max-width: 260px;
   text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.dice-remaining-card {
+  width: 28px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: linear-gradient(135deg, #2a2a35, #16171d);
+  color: #9ca3af;
+  font-size: 14px;
+}
+
+/* 神兽抽卡 */
+.dice-draw {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+}
+
+.dice-card-grid {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  perspective: 800px;
+}
+
+.dice-card {
+  width: 52px;
+  height: 72px;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.dice-card:disabled:not(.revealed) {
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+.dice-card.revealed {
+  transform: rotateY(180deg);
+}
+
+.dice-card-face,
+.dice-card-back {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.dice-card-back {
+  background: linear-gradient(135deg, #2a2a35, #16171d);
+  color: #9ca3af;
+  border: 2px solid #3e404a;
+}
+
+.dice-card-face {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border: 2px solid var(--accent);
+  transform: rotateY(180deg);
+}
+
+/* 调试面板 */
+.debug-panel {
+  position: relative;
+}
+
+.debug-drawer {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 260px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+}
+
+.debug-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.debug-card-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.debug-card-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.debug-card-id {
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.debug-phase-buttons {
+  display: flex;
+  gap: 4px;
 }

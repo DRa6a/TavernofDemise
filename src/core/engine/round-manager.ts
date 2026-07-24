@@ -229,7 +229,7 @@ export class RoundManager {
 
       this.state.phase = GamePhase.LIFE_DEATH;
       this.state.pendingLifeDeath = {
-        loserId: result.challengerWins ? challenger.id : this.state.lastPlay!.playerId,
+        loserId: result.challengerWins ? this.state.lastPlay!.playerId : challenger.id,
       };
     } else {
       if (this.ruleEngine.mustChallenge(this.state)) {

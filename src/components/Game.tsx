@@ -5,7 +5,9 @@ import { PlayerSeat } from './PlayerSeat';
 import { ActionPanel } from './ActionPanel';
 import { GameLog } from './GameLog';
 import { TablePlay } from './TablePlay';
-import { DicePool } from './DicePool';
+import { DiceDraw } from './DiceDraw';
+import { TruthBanner } from './TruthBanner';
+import { DebugPanel } from './DebugPanel';
 import { GamePhase } from '../utils/constants';
 
 export function Game() {
@@ -13,6 +15,7 @@ export function Game() {
   const {
     gameState,
     pendingDiceResult,
+    revealDelay,
     selectedCardIds,
     startGame,
     playCards,
@@ -44,6 +47,7 @@ export function Game() {
           </span>
         </div>
         <div className="header-right">
+          <DebugPanel />
           <button type="button" className="btn-text" onClick={() => setLogOpen((v) => !v)}>
             {logOpen ? '收起记录' : '对局记录'}
           </button>
@@ -52,7 +56,7 @@ export function Game() {
             className="btn-text"
             onClick={() => {
               if (confirm('确定要重新开始吗？')) {
-                useGameStore.setState({ gameState: null, manager: null, selectedCardIds: [], pendingDiceResult: undefined });
+                useGameStore.setState({ gameState: null, manager: null, selectedCardIds: [], pendingDiceResult: undefined, revealDelay: false });
               }
             }}
           >
@@ -81,10 +85,13 @@ export function Game() {
           ))}
         </section>
 
+        <TruthBanner truthPhase={gameState.truthPhase} />
+
         <section className="table-center">
-          <TablePlay lastPlay={gameState.lastPlay} truthPhase={gameState.truthPhase} />
-          {isLifeDeath && pendingLoser ? (
-            <DicePool
+          {revealDelay ? (
+            <TablePlay lastPlay={gameState.lastPlay} truthPhase={gameState.truthPhase} />
+          ) : isLifeDeath && pendingLoser ? (
+            <DiceDraw
               availableBeasts={pendingLoser.availableBeasts}
               rolledFaces={pendingLoser.rolledFaces}
               resultFace={pendingDiceResult}
@@ -94,13 +101,16 @@ export function Game() {
               onAnimationComplete={resolveDiceAnimation}
             />
           ) : (
-            <ActionPanel
-              gameState={gameState}
-              selectedCount={selectedCardIds.length}
-              onPlay={() => playCards(selectedCardIds)}
-              onChallenge={() => openPhase('challenge')}
-              onPass={() => openPhase('pass')}
-            />
+            <>
+              <TablePlay lastPlay={gameState.lastPlay} truthPhase={gameState.truthPhase} />
+              <ActionPanel
+                gameState={gameState}
+                selectedCount={selectedCardIds.length}
+                onPlay={() => playCards(selectedCardIds)}
+                onChallenge={() => openPhase('challenge')}
+                onPass={() => openPhase('pass')}
+              />
+            </>
           )}
         </section>
 
