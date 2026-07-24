@@ -586,41 +586,32 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 8px;
 }
 
 .dice-title {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text-h);
-  letter-spacing: 0.5px;
 }
 
 .dice-card-grid {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
   justify-content: center;
-  perspective: 900px;
-  padding: 6px 4px;
-}
-
-.dice-card-grid.phase-drawing .dice-card:not(.locked) {
-  animation: diceShake 0.4s ease-in-out infinite;
+  perspective: 800px;
 }
 
 .dice-card {
-  width: 56px;
-  height: 78px;
+  width: 52px;
+  height: 72px;
   position: relative;
   transform-style: preserve-3d;
-  transition:
-    transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 0.25s ease,
-    border-color 0.25s ease;
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s, border-color 0.2s;
   border: 2px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
   background: transparent;
   padding: 0;
   cursor: pointer;
@@ -628,24 +619,21 @@
 }
 
 .dice-card:hover:not(:disabled):not(.revealed):not(.locked) {
-  transform: translateY(-5px);
+  transform: translateY(-4px);
   border-color: var(--accent);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
 }
 
 .dice-card:disabled:not(.revealed),
 .dice-card.locked:not(.revealed) {
   cursor: not-allowed;
-  opacity: 0.78;
-  filter: grayscale(0.25);
+  opacity: 0.75;
 }
 
 .dice-card.revealed {
-  transform: rotateY(180deg) scale(1.12);
+  transform: rotateY(180deg);
   border-color: var(--accent);
-  box-shadow: 0 0 24px var(--accent-border), 0 0 8px var(--accent) inset;
-  z-index: 2;
-  animation: diceRevealPulse 0.65s ease;
+  box-shadow: 0 0 18px var(--accent-border);
 }
 
 .dice-card-face,
@@ -658,17 +646,14 @@
   border-radius: 8px;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .dice-card-back {
   background: linear-gradient(135deg, #2a2a35, #16171d);
   color: #9ca3af;
   border: 2px solid #3e404a;
-  font-size: 22px;
-  text-shadow: 0 0 8px rgba(170, 59, 255, 0.45);
 }
 
 .dice-card-face {
@@ -679,37 +664,24 @@
 }
 
 .dice-result {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text-h);
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  animation: diceResultIn 0.5s ease;
+  gap: 4px;
 }
 
 .dice-result.is-death {
-  border-color: #dc2626;
   color: #dc2626;
-  background: rgba(220, 38, 38, 0.08);
-  box-shadow: 0 0 20px rgba(220, 38, 38, 0.4);
-  animation: diceResultIn 0.5s ease, diceDeathPulse 0.9s ease infinite;
 }
 
 .dice-result.is-life {
-  border-color: #16a34a;
   color: #16a34a;
-  background: rgba(22, 163, 74, 0.08);
-  box-shadow: 0 0 18px rgba(22, 163, 74, 0.35);
 }
 
 .dice-result-text {
-  font-size: 18px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .dice-rolled {
@@ -717,29 +689,6 @@
   color: var(--text);
   max-width: 320px;
   text-align: center;
-}
-
-@keyframes diceShake {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  25% { transform: translateY(-3px) rotate(-2deg); }
-  50% { transform: translateY(0) rotate(0deg); }
-  75% { transform: translateY(-3px) rotate(2deg); }
-}
-
-@keyframes diceRevealPulse {
-  0% { transform: rotateY(0) scale(1); }
-  50% { transform: rotateY(90deg) scale(1.18); }
-  100% { transform: rotateY(180deg) scale(1.12); }
-}
-
-@keyframes diceResultIn {
-  from { opacity: 0; transform: translateY(8px) scale(0.9); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@keyframes diceDeathPulse {
-  0%, 100% { box-shadow: 0 0 20px rgba(220, 38, 38, 0.35); }
-  50% { box-shadow: 0 0 30px rgba(220, 38, 38, 0.7); }
 }
 
 /* 调试面板 */
