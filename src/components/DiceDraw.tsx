@@ -77,16 +77,6 @@ export function DiceDraw({
           结果：<span className={resultFace === '天龙' ? 'death' : 'life'}>{resultFace}</span>
         </div>
       )}
-      <div className="dice-remaining">
-        未翻开：
-        {availableBeasts
-          .filter((f) => f !== resultFace)
-          .map((f) => (
-            <span key={f} className="dice-remaining-card">
-              ?
-            </span>
-          ))}
-      </div>
       {rolledFaces.length > 0 && (
         <div className="dice-rolled">已抽：{rolledFaces.join(' ')}</div>
       )}

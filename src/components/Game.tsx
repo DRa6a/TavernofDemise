@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useGameStore, HUMAN_ID } from '../store/game-store';
 import { StartScreen } from './StartScreen';
 import { PlayerSeat } from './PlayerSeat';
@@ -8,10 +8,14 @@ import { TablePlay } from './TablePlay';
 import { DiceDraw } from './DiceDraw';
 import { TruthBanner } from './TruthBanner';
 import { DebugPanel } from './DebugPanel';
+import { GameOverOverlay } from './GameOverOverlay';
+import { DeathOverlay } from './DeathOverlay';
 import { GamePhase } from '../utils/constants';
 
 export function Game() {
   const [logOpen, setLogOpen] = useState(false);
+  const [deathOverlay, setDeathOverlay] = useState<{ show: boolean; name: string } | null>(null);
+  const [gameOverOverlay, setGameOverOverlay] = useState<{ show: boolean; name: string } | null>(null);
   const {
     gameState,
     pendingDiceResult,
@@ -36,6 +40,28 @@ export function Game() {
   const pendingLoser = isLifeDeath && gameState.pendingLifeDeath
     ? gameState.players.find((p) => p.id === gameState.pendingLifeDeath!.loserId)
     : undefined;
+
+  useEffect(() => {
+    if (gameState.phase === GamePhase.GAME_OVER && gameState.winnerId) {
+      const winner = gameState.players.find((p) => p.id === gameState.winnerId);
+      if (winner) {
+        setGameOverOverlay({ show: true, name: winner.name });
+      }
+    }
+  }, [gameState.phase, gameState.winnerId, gameState.players]);
+
+  useEffect(() => {
+    const lastEvent = gameState.history[gameState.history.length - 1];
+    if (lastEvent?.type === 'PLAYER_DIED') {
+      const player = gameState.players.find((p) => p.id === lastEvent.playerId);
+      if (player) {
+        setDeathOverlay({ show: true, name: player.name });
+        const timer = window.setTimeout(() => setDeathOverlay(null), 2200);
+        return () => window.clearTimeout(timer);
+      }
+    }
+    return undefined;
+  }, [gameState.history.length, gameState.history, gameState.players]);
 
   return (
     <div className="game">
@@ -85,7 +111,7 @@ export function Game() {
           ))}
         </section>
 
-        <TruthBanner truthPhase={gameState.truthPhase} />
+        {!revealDelay && !isLifeDeath && <TruthBanner truthPhase={gameState.truthPhase} />}
 
         <section className="table-center">
           {revealDelay ? (
@@ -126,6 +152,9 @@ export function Game() {
           )}
         </section>
       </main>
+
+      {gameOverOverlay?.show && <GameOverOverlay winnerName={gameOverOverlay.name} />}
+      {deathOverlay?.show && <DeathOverlay playerName={deathOverlay.name} />}
     </div>
   );
 }

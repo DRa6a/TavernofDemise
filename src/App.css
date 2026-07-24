@@ -703,3 +703,79 @@
   display: flex;
   gap: 4px;
 }
+
+/* 获胜 / 出局覆盖层 */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.overlay-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.68);
+  backdrop-filter: blur(5px);
+  animation: overlayFadeIn 0.35s ease forwards;
+}
+
+.overlay-content {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  padding: 48px 64px;
+  border-radius: 20px;
+  animation: overlayScaleIn 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.game-over-overlay .overlay-content {
+  background: linear-gradient(135deg, rgba(170, 59, 255, 0.22), rgba(170, 59, 255, 0.06));
+  border: 1px solid rgba(170, 59, 255, 0.45);
+  box-shadow: 0 0 48px rgba(170, 59, 255, 0.35);
+}
+
+.death-overlay .overlay-content {
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.22), rgba(220, 38, 38, 0.06));
+  border: 1px solid rgba(220, 38, 38, 0.45);
+  box-shadow: 0 0 48px rgba(220, 38, 38, 0.35);
+}
+
+.overlay-icon {
+  font-size: 70px;
+  line-height: 1;
+  margin-bottom: 18px;
+  animation: overlayIconBounce 0.65s ease forwards;
+}
+
+.overlay-title {
+  font-size: 44px;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 10px;
+  text-shadow: 0 0 24px rgba(255, 255, 255, 0.35);
+}
+
+.overlay-subtitle {
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.88);
+  font-weight: 600;
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes overlayScaleIn {
+  from { opacity: 0; transform: scale(0.55); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes overlayIconBounce {
+  0% { transform: scale(0) rotate(-15deg); }
+  60% { transform: scale(1.2) rotate(5deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}

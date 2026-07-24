@@ -27,11 +27,7 @@ export function PlayerSeat({
           {player.name} {isHuman && '(你)'}
         </span>
         <span className="player-status">
-          {player.isDead
-            ? '已出局'
-            : player.isOutOfRound
-            ? '本轮跳过'
-            : `${player.hand.length} 张 · 神兽 ${player.availableBeasts.length}`}
+          {player.isDead ? '已出局' : player.isOutOfRound ? '本轮跳过' : `${player.hand.length} 张`}
         </span>
       </div>
       {player.rolledFaces.length > 0 && (

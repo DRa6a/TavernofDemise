@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { GameEvent } from '../core/models/types';
 
 interface GameLogProps {
@@ -38,10 +39,19 @@ function formatEvent(event: GameEvent): string {
 }
 
 export function GameLog({ events }: GameLogProps) {
+  const listRef = useRef<HTMLUListElement>(null);
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (list) {
+      list.scrollTop = list.scrollHeight;
+    }
+  }, [events.length]);
+
   return (
     <div className="game-log">
       <h3>对局记录</h3>
-      <ul>
+      <ul ref={listRef}>
         {events.map((event, index) => (
           <li key={index}>{formatEvent(event)}</li>
         ))}

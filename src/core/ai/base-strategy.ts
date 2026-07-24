@@ -23,11 +23,16 @@ export class BaseStrategy implements AIStrategy {
   }
 
   decideChallenge(context: AIContext): boolean {
-    const { state } = context;
+    const { player, state } = context;
     if (!state.lastPlay) return false;
 
     const alivePlayers = state.players.filter((p) => !p.isDead);
     if (alivePlayers.length <= 2) return true;
+
+    const playersWithHand = alivePlayers.filter((p) => p.hand.length > 0);
+    if (playersWithHand.length === 1 && playersWithHand[0].id === player.id) {
+      return true;
+    }
 
     return this.random.next() < 0.3;
   }
