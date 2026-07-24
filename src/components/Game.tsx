@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useGameStore, HUMAN_ID } from '../store/game-store';
 import { StartScreen } from './StartScreen';
 import { PlayerSeat } from './PlayerSeat';
@@ -5,6 +6,7 @@ import { ActionPanel } from './ActionPanel';
 import { GameLog } from './GameLog';
 
 export function Game() {
+  const [logOpen, setLogOpen] = useState(false);
   const {
     gameState,
     selectedCardIds,
@@ -24,13 +26,35 @@ export function Game() {
   return (
     <div className="game">
       <header className="game-header">
-        <h1>终焉酒馆</h1>
-        <div className="game-meta">
-          <span>第 {gameState.currentRound} 回合</span>
-          {gameState.truthPhase && <span>真牌：{gameState.truthPhase}</span>}
-          <span>阶段：{phaseLabel(gameState.phase)}</span>
+        <div className="header-left">
+          <h1>终焉酒馆</h1>
+          <span className="game-meta">
+            第 {gameState.currentRound} 回合 · 真牌 {gameState.truthPhase ?? '-'} · {phaseLabel(gameState.phase)}
+          </span>
+        </div>
+        <div className="header-right">
+          <button type="button" className="btn-text" onClick={() => setLogOpen((v) => !v)}>
+            {logOpen ? '收起记录' : '对局记录'}
+          </button>
+          <button
+            type="button"
+            className="btn-text"
+            onClick={() => {
+              if (confirm('确定要重新开始吗？')) {
+                useGameStore.setState({ gameState: null, manager: null, selectedCardIds: [] });
+              }
+            }}
+          >
+            重开
+          </button>
         </div>
       </header>
+
+      {logOpen && (
+        <div className="log-drawer">
+          <GameLog events={gameState.history} />
+        </div>
+      )}
 
       <main className="game-board">
         <section className="opponents">
@@ -47,16 +71,18 @@ export function Game() {
         </section>
 
         <section className="table-center">
-          {gameState.lastPlay && (
+          {gameState.lastPlay ? (
             <div className="last-play">
               <span className="last-play-player">{gameState.lastPlay.playerId}</span>
-              <span>打出了 {gameState.lastPlay.declaredCount} 张牌</span>
+              <span>打出 {gameState.lastPlay.declaredCount} 张</span>
               {gameState.lastPlay.isRevealed && (
                 <span className="reveal-result">
                   {gameState.lastPlay.cards.map((c) => c.phase).join(' ')}
                 </span>
               )}
             </div>
+          ) : (
+            <div className="last-play empty">等待出牌</div>
           )}
           <ActionPanel
             gameState={gameState}
@@ -79,21 +105,6 @@ export function Game() {
           )}
         </section>
       </main>
-
-      <aside className="game-sidebar">
-        <GameLog events={gameState.history} />
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={() => {
-            if (confirm('确定要重新开始吗？')) {
-              useGameStore.setState({ gameState: null, manager: null, selectedCardIds: [] });
-            }
-          }}
-        >
-          重新开始
-        </button>
-      </aside>
     </div>
   );
 }
@@ -103,7 +114,7 @@ function phaseLabel(phase: string): string {
     waiting: '等待',
     election: '选举',
     drawing: '抽牌',
-    truth: '真牌宣告',
+    truth: '真牌',
     playing: '出牌',
     opening: '开牌',
     life_death: '生死',
