@@ -26,8 +26,15 @@ export function ActionPanel({ gameState, selectedCount, onPlay, onChallenge, onP
 
   const canPlay = humanActive && gameState.phase === GamePhase.PLAYING && selectedCount >= MIN_PLAY_CARDS && selectedCount <= MAX_PLAY_CARDS;
   const canChallenge = humanActive && gameState.phase === GamePhase.OPENING && gameState.lastPlay && gameState.lastPlay.playerId !== gameState.activePlayerId;
-  const aliveWithHand = gameState.players.filter((p) => !p.isDead && p.hand.length > 0);
-  const mustChallenge = canChallenge && aliveWithHand.length === 1;
+  const me = gameState.players.find((p) => p.isHuman);
+  const othersCanAct = gameState.players.some((p) => {
+    if (!me || p.id === me.id) return false;
+    if (p.isDead) return false;
+    if (p.isOutOfRound) return false;
+    if (p.hand.length === 0) return false;
+    return true;
+  });
+  const mustChallenge = canChallenge && !othersCanAct;
 
   return (
     <div className="action-panel">

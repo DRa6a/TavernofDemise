@@ -40,25 +40,24 @@ export class BaseStrategy implements AIStrategy {
     const { player, state } = context;
     if (!state.lastPlay || !state.truthPhase) return false;
 
-    const alivePlayers = state.players.filter((p) => !p.isDead);
-    const aliveWithHand = alivePlayers.filter((p) => p.hand.length > 0);
-
-    // 强制规则由引擎保证，AI 不再重复判断
-    if (aliveWithHand.length === 1) return false;
+    // 只剩自己还有未出的手牌时，必须质疑上家（否则没人会再质疑）
+    const othersCanAct = state.players.some((p) => {
+      if (p.id === player.id) return false;
+      if (p.isDead) return false;
+      if (p.isOutOfRound) return false;
+      if (p.hand.length === 0) return false;
+      return true;
+    });
+    if (!othersCanAct) return true;
 
     const truth = state.truthPhase;
     const matchingCards = player.hand.filter(
       (c) => c.phase === truth || c.phase === CardPhase.DAO
     );
 
-    // 自己握有大量真牌/道牌时，上家声称出真牌更可能是假的
     if (matchingCards.length >= 4) return true;
     if (matchingCards.length >= 3 && state.lastPlay.declaredCount >= 2) return true;
-
-    // 上家一次性出 3 张且自己手牌里同相位很少时，也倾向于质疑
-    if (state.lastPlay.declaredCount === 3 && matchingCards.length <= 1) {
-      return true;
-    }
+    if (state.lastPlay.declaredCount === 3 && matchingCards.length <= 1) return true;
 
     return this.random.next() < 0.2;
   }
