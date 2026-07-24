@@ -51,6 +51,7 @@ export interface GameState {
   truthPhase?: CardPhase;
   dice: DivineDice;
   deadFaces: DivineBeast[];
+  pendingLifeDeath?: { loserId: string };
   winnerId?: string;
   history: GameEvent[];
 }

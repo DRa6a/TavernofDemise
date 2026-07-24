@@ -38,6 +38,11 @@ describe('RoundManager', () => {
 
     manager.openPhase('challenge');
 
+    expect(manager.getState().phase).toBe(GamePhase.LIFE_DEATH);
+    expect(manager.getState().pendingLifeDeath).toBeDefined();
+
+    manager.resolveLifeDeath();
+
     const state = manager.getState();
     const revealed = state.history.some((e) => e.type === 'CARDS_REVEALED');
     expect(revealed).toBe(true);

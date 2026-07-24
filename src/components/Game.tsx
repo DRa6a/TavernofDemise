@@ -4,15 +4,21 @@ import { StartScreen } from './StartScreen';
 import { PlayerSeat } from './PlayerSeat';
 import { ActionPanel } from './ActionPanel';
 import { GameLog } from './GameLog';
+import { TablePlay } from './TablePlay';
+import { DicePool } from './DicePool';
+import { GamePhase } from '../utils/constants';
 
 export function Game() {
   const [logOpen, setLogOpen] = useState(false);
   const {
     gameState,
+    pendingDiceResult,
     selectedCardIds,
     startGame,
     playCards,
     openPhase,
+    drawDice,
+    resolveDiceAnimation,
     toggleCard,
   } = useGameStore();
 
@@ -22,6 +28,17 @@ export function Game() {
 
   const humanPlayer = gameState.players.find((p) => p.id === HUMAN_ID);
   const opponents = gameState.players.filter((p) => p.id !== HUMAN_ID);
+
+  const lastRolledMap = new Map(
+    gameState.history
+      .filter((e) => e.type === 'DICE_ROLLED')
+      .map((e) => [e.playerId, e.face])
+  );
+
+  const isLifeDeath = gameState.phase === GamePhase.LIFE_DEATH;
+  const pendingLoser = isLifeDeath && gameState.pendingLifeDeath
+    ? gameState.players.find((p) => p.id === gameState.pendingLifeDeath!.loserId)
+    : undefined;
 
   return (
     <div className="game">
@@ -41,7 +58,7 @@ export function Game() {
             className="btn-text"
             onClick={() => {
               if (confirm('确定要重新开始吗？')) {
-                useGameStore.setState({ gameState: null, manager: null, selectedCardIds: [] });
+                useGameStore.setState({ gameState: null, manager: null, selectedCardIds: [], pendingDiceResult: undefined });
               }
             }}
           >
@@ -65,32 +82,34 @@ export function Game() {
               isActive={player.id === gameState.activePlayerId}
               isHuman={false}
               selectedIds={[]}
+              lastRolledFace={lastRolledMap.get(player.id)}
               onToggleCard={() => {}}
             />
           ))}
         </section>
 
         <section className="table-center">
-          {gameState.lastPlay ? (
-            <div className="last-play">
-              <span className="last-play-player">{gameState.lastPlay.playerId}</span>
-              <span>打出 {gameState.lastPlay.declaredCount} 张</span>
-              {gameState.lastPlay.isRevealed && (
-                <span className="reveal-result">
-                  {gameState.lastPlay.cards.map((c) => c.phase).join(' ')}
-                </span>
-              )}
-            </div>
+          {isLifeDeath && pendingLoser ? (
+            <DicePool
+              availableFaces={gameState.dice.availableFaces}
+              resultFace={pendingDiceResult}
+              loserName={pendingLoser.name}
+              canDraw={pendingLoser.isHuman}
+              onDraw={drawDice}
+              onAnimationComplete={resolveDiceAnimation}
+            />
           ) : (
-            <div className="last-play empty">等待出牌</div>
+            <>
+              <TablePlay lastPlay={gameState.lastPlay} />
+              <ActionPanel
+                gameState={gameState}
+                selectedCount={selectedCardIds.length}
+                onPlay={() => playCards(selectedCardIds)}
+                onChallenge={() => openPhase('challenge')}
+                onPass={() => openPhase('pass')}
+              />
+            </>
           )}
-          <ActionPanel
-            gameState={gameState}
-            selectedCount={selectedCardIds.length}
-            onPlay={() => playCards(selectedCardIds)}
-            onChallenge={() => openPhase('challenge')}
-            onPass={() => openPhase('pass')}
-          />
         </section>
 
         <section className="human-area">
@@ -100,6 +119,7 @@ export function Game() {
               isActive={humanPlayer.id === gameState.activePlayerId}
               isHuman={true}
               selectedIds={selectedCardIds}
+              lastRolledFace={lastRolledMap.get(humanPlayer.id)}
               onToggleCard={toggleCard}
             />
           )}

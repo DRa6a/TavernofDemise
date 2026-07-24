@@ -3,6 +3,7 @@ import {
 } from '../models/types';
 import type {
   Card,
+  DivineBeast,
   GameEvent,
   GameState,
   Player,
@@ -224,7 +225,9 @@ export class RoundManager {
       }
 
       this.state.phase = GamePhase.LIFE_DEATH;
-      this.resolveLifeDeath(result.challengerWins ? challenger.id : this.state.lastPlay!.playerId);
+      this.state.pendingLifeDeath = {
+        loserId: result.challengerWins ? challenger.id : this.state.lastPlay!.playerId,
+      };
     } else {
       if (this.ruleEngine.mustChallenge(this.state)) {
         throw new Error('仅剩两名存活玩家时必须质疑');
@@ -234,7 +237,13 @@ export class RoundManager {
     }
   }
 
-  private resolveLifeDeath(loserId: string): void {
+  resolveLifeDeath(face?: DivineBeast): void {
+    const pending = this.state.pendingLifeDeath;
+    if (!pending) {
+      throw new Error('当前没有待执行的生死判定');
+    }
+
+    const loserId = pending.loserId;
     const loser = this.state.players.find((p) => p.id === loserId);
     if (!loser) throw new Error('受判玩家不存在');
 
@@ -242,17 +251,18 @@ export class RoundManager {
       this.state.dice.availableFaces = [DivineBeastEnum.TIAN_LONG];
     }
 
-    const faceIndex = Math.floor(this.random.next() * this.state.dice.availableFaces.length);
-    const face = this.state.dice.availableFaces[faceIndex];
+    const finalFace = face ?? this.state.dice.availableFaces[Math.floor(this.random.next() * this.state.dice.availableFaces.length)];
 
-    this.emit({ type: 'DICE_ROLLED', playerId: loserId, face });
+    this.emit({ type: 'DICE_ROLLED', playerId: loserId, face: finalFace });
 
-    const result = this.ruleEngine.resolveDice(loser, face);
+    const result = this.ruleEngine.resolveDice(loser, finalFace);
 
-    if (face !== DivineBeastEnum.TIAN_LONG) {
-      this.state.deadFaces.push(face);
-      this.state.dice.availableFaces = this.state.dice.availableFaces.filter((f) => f !== face);
+    if (finalFace !== DivineBeastEnum.TIAN_LONG) {
+      this.state.deadFaces.push(finalFace);
+      this.state.dice.availableFaces = this.state.dice.availableFaces.filter((f) => f !== finalFace);
     }
+
+    this.state.pendingLifeDeath = undefined;
 
     if (result.isDead) {
       loser.isDead = true;
