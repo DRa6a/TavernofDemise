@@ -23,6 +23,15 @@ export function DiceDraw({
   const [revealedIndex, setRevealedIndex] = useState<number | null>(null);
   const timerRef = useRef<number | null>(null);
   const aiStartedRef = useRef(false);
+  const prevBeastCountRef = useRef(availableBeasts.length);
+
+  useEffect(() => {
+    if (availableBeasts.length !== prevBeastCountRef.current) {
+      prevBeastCountRef.current = availableBeasts.length;
+      aiStartedRef.current = false;
+      setRevealedIndex(null);
+    }
+  }, [availableBeasts.length]);
 
   useEffect(() => {
     if (!canDraw || aiStartedRef.current || resultFace) return;

@@ -601,23 +601,33 @@
 .dice-card {
   width: 52px;
   height: 72px;
-  position: relative;
+  position:relative;
   transform-style: preserve-3d;
-  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s, border-color 0.2s;
   border: 2px solid var(--border);
   border-radius: 8px;
   background: transparent;
   padding: 0;
   cursor: pointer;
+  will-change: transform;
 }
 
-.dice-card:disabled:not(.revealed) {
+.dice-card:hover:not(:disabled):not(.revealed):not(.locked) {
+  transform: translateY(-4px);
+  border-color: var(--accent);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+.dice-card:disabled:not(.revealed),
+.dice-card.locked:not(.revealed) {
   cursor: not-allowed;
-  opacity: 0.8;
+  opacity: 0.75;
 }
 
 .dice-card.revealed {
   transform: rotateY(180deg);
+  border-color: var(--accent);
+  box-shadow: 0 0 18px var(--accent-border);
 }
 
 .dice-card-face,

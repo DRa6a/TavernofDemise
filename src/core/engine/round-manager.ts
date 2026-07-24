@@ -233,7 +233,7 @@ export class RoundManager {
       };
     } else {
       if (this.ruleEngine.mustChallenge(this.state)) {
-        throw new Error('仅剩两名存活玩家时必须质疑');
+        throw new Error('只剩一名玩家有手牌时必须质疑上家');
       }
 
       this.state.phase = GamePhase.PLAYING;
