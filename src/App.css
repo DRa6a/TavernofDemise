@@ -475,6 +475,11 @@
   border-width: 2px;
 }
 
+/* 玩家自己的手牌居中显示 */
+.human-area .hand {
+  justify-content: center;
+}
+
 /* 对局记录 */
 .game-log {
   display: flex;

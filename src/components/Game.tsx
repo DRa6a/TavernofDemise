@@ -115,7 +115,8 @@ export function Game() {
           ))}
         </section>
 
-        {!isLifeDeath && <TruthBanner truthPhase={gameState.truthPhase} />}
+        {/* 真牌相：开牌翻开动画期间仍可见，仅在真正进入抽神兽界面时被 DiceDraw 覆盖 */}
+        {!(isLifeDeath && !revealDelay) && <TruthBanner truthPhase={gameState.truthPhase} />}
 
         <section className="table-center">
           {revealDelay ? (

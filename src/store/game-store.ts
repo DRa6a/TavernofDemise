@@ -176,7 +176,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     window.setTimeout(() => {
       const { manager } = get();
-      if (!manager) return;
+      if (!manager) {
+        set({ aiThinking: false });
+        return;
+      }
 
       const currentState = manager.getState();
       const aiPlayer = getActivePlayer(currentState);
@@ -191,17 +194,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (currentState.phase === GamePhase.PLAYING) {
         const cards = strategy.decidePlay({ player: aiPlayer, state: currentState, lastPlay: currentState.lastPlay });
         manager.playCards(aiPlayer.id, cards.map((c) => c.id));
-      } else if (currentState.phase === GamePhase.OPENING) {
+        set({ gameState: { ...manager.getState() }, aiThinking: false });
+        get().runAiLoop();
+        return;
+      }
+
+      if (currentState.phase === GamePhase.OPENING) {
         const shouldChallenge = strategy.decideChallenge({
           player: aiPlayer,
           state: currentState,
           lastPlay: currentState.lastPlay,
         });
-        manager.openPhase(shouldChallenge ? 'challenge' : 'pass');
+        // 走 store 的 openPhase action，保证质疑后也能触发 3 秒翻开动画
+        get().openPhase(shouldChallenge ? 'challenge' : 'pass');
+        set({ aiThinking: false });
+        return;
       }
 
-      set({ gameState: { ...manager.getState() }, aiThinking: false });
-      get().runAiLoop();
+      set({ aiThinking: false });
     }, 800);
   },
 }));
