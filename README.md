@@ -1,32 +1,61 @@
-# React + TypeScript + Vite
+# 终焉酒馆 (Doomsday Tavern)
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+一款基于 React + TypeScript + Vite 的多玩家推理卡牌游戏"终焉酒馆"。玩家通过出牌、质疑、抽神兽等机制角逐唯一幸存者。
 
-Currently, two official plugins are available:
+> 本项目由 **AI 辅助开发** 完成：架构设计、核心引擎、AI 策略、UI/UX 动画与调试功能等均由 AI（基于 Kimi / Claude 系列大模型）协作生成，作者参与需求与代码 review。
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 功能特性
 
-## React Compiler
+- 完整对局流程：选举先手 → 抽牌 → 宣布真牌相 → 出牌 → 质疑 → 生死判定
+- 独立神兽池：每位玩家有专属的 6 个神兽，掷中"天龙"即死亡
+- 真牌/道牌/假牌相位判定：质疑成功可置对手于生死判定
+- 智能 AI 对手：基于真牌持有量、上家出牌数等条件判断出牌与质疑策略
+- 调试面板：可减少手牌、替换手牌相位、强制掀开所有牌面
+- 紧凑单屏 UI：获胜/死亡覆盖层、对局记录自动滚到底部、3D 翻牌动画
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 技术栈
 
-## Expanding the Oxlint configuration
+- React 19 + TypeScript
+- Vite 8 构建
+- Zustand 状态管理
+- Vitest 单元测试
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+## 项目结构
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```
+src/
+├── components/      # React 组件（Game、Hand、TablePlay、DiceDraw 等）
+├── core/
+│   ├── engine/      # 回合管理、规则引擎、洗牌、发牌
+│   ├── ai/          # AI 策略（基础策略）
+│   └── models/      # 领域类型
+├── store/           # Zustand 全局状态
+├── utils/           # 常量与工具
+└── scripts/         # 模拟脚本
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## 开发命令
+
+```bash
+npm install        # 安装依赖
+npm run dev        # 启动开发服务器
+npm run build      # 类型检查 + 生产构建
+npm test           # 运行单元测试
+npm run lint       # 运行 oxlint
+npm run simulate   # 运行对局模拟脚本
+```
+
+## 游戏规则（简述）
+
+1. 首位玩家被随机选出，存活玩家各抽 6 张牌
+2. 系统随机公布"真牌相"（天/地/人）
+3. 玩家轮流出 1-3 张牌，声称是"真牌相"
+4. 下一位玩家选择"质疑"或"跳过"
+5. 质疑时翻开上家牌：若为假则质疑方赢；若为真则上家赢
+6. 失败方进入"抽神兽"环节：随机抽 1 个神兽，抽到"天龙"则死亡
+7. 存活到最后一名玩家即获胜
+
+## 致谢
+
+- 游戏机制参考经典桌游 Liar's Bar / 骗子酒馆系列
+- UI 设计与动画由 AI 协作完成
