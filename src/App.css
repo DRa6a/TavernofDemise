@@ -720,6 +720,23 @@
   color: var(--text);
 }
 
+.debug-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.debug-toggle input[type='checkbox'] {
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+}
+
 .debug-card-grid {
   display: flex;
   flex-direction: column;

@@ -21,6 +21,7 @@ export function Game() {
     pendingDiceResult,
     revealDelay,
     selectedCardIds,
+    revealAll,
     startGame,
     playCards,
     openPhase,
@@ -108,6 +109,7 @@ export function Game() {
               isActive={player.id === gameState.activePlayerId}
               isHuman={false}
               selectedIds={[]}
+              revealAll={revealAll}
               onToggleCard={() => {}}
             />
           ))}
@@ -117,7 +119,7 @@ export function Game() {
 
         <section className="table-center">
           {revealDelay ? (
-            <TablePlay lastPlay={gameState.lastPlay} truthPhase={gameState.truthPhase} />
+            <TablePlay lastPlay={gameState.lastPlay} truthPhase={gameState.truthPhase} revealAll={revealAll} />
           ) : isLifeDeath && pendingLoser ? (
             <DiceDraw
               availableBeasts={pendingLoser.availableBeasts}
@@ -125,12 +127,13 @@ export function Game() {
               resultFace={pendingDiceResult}
               loserName={pendingLoser.name}
               canDraw={pendingLoser.isHuman}
+              revealAll={revealAll}
               onDraw={drawDice}
               onAnimationComplete={resolveDiceAnimation}
             />
           ) : (
             <>
-              <TablePlay lastPlay={gameState.lastPlay} truthPhase={gameState.truthPhase} />
+              <TablePlay lastPlay={gameState.lastPlay} truthPhase={gameState.truthPhase} revealAll={revealAll} />
               <ActionPanel
                 gameState={gameState}
                 selectedCount={selectedCardIds.length}
@@ -149,6 +152,7 @@ export function Game() {
               isActive={humanPlayer.id === gameState.activePlayerId}
               isHuman={true}
               selectedIds={selectedCardIds}
+              revealAll={revealAll}
               onToggleCard={toggleCard}
             />
           )}

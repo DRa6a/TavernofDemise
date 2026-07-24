@@ -6,6 +6,7 @@ interface PlayerSeatProps {
   isActive: boolean;
   isHuman: boolean;
   selectedIds: string[];
+  revealAll: boolean;
   onToggleCard: (cardId: string) => void;
 }
 
@@ -14,6 +15,7 @@ export function PlayerSeat({
   isActive,
   isHuman,
   selectedIds,
+  revealAll,
   onToggleCard,
 }: PlayerSeatProps) {
   return (
@@ -46,6 +48,15 @@ export function PlayerSeat({
           disabled={!isActive}
           hidden={false}
           onToggle={onToggleCard}
+        />
+      )}
+      {!isHuman && revealAll && player.hand.length > 0 && (
+        <Hand
+          cards={player.hand}
+          selectedIds={[]}
+          disabled
+          hidden={false}
+          onToggle={() => {}}
         />
       )}
     </div>

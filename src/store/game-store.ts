@@ -12,6 +12,7 @@ interface GameStore {
   revealDelay: boolean;
   selectedCardIds: string[];
   aiThinking: boolean;
+  revealAll: boolean;
 
   startGame: (configs: PlayerConfig[]) => void;
   playCards: (cardIds: string[]) => void;
@@ -23,6 +24,7 @@ interface GameStore {
   deselectCard: (cardId: string) => void;
   toggleCard: (cardId: string) => void;
   clearSelection: () => void;
+  setRevealAll: (value: boolean) => void;
   runAiLoop: () => void;
 }
 
@@ -43,6 +45,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   revealDelay: false,
   selectedCardIds: [],
   aiThinking: false,
+  revealAll: false,
 
   startGame: (configs) => {
     const manager = createManager();
@@ -135,6 +138,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   clearSelection: () => set({ selectedCardIds: [] }),
+
+  setRevealAll: (value) => set({ revealAll: value }),
 
   runAiLoop: () => {
     const store = get();

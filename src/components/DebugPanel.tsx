@@ -5,7 +5,7 @@ import type { Card } from '../core/models/types';
 
 export function DebugPanel() {
   const [open, setOpen] = useState(false);
-  const { gameState, modifyHand } = useGameStore();
+  const { gameState, modifyHand, revealAll, setRevealAll } = useGameStore();
 
   if (!gameState) return null;
 
@@ -21,6 +21,16 @@ export function DebugPanel() {
       </button>
       {open && (
         <div className="debug-drawer">
+          <div className="debug-row">
+            <label className="debug-toggle">
+              <input
+                type="checkbox"
+                checked={revealAll}
+                onChange={(e) => setRevealAll(e.target.checked)}
+              />
+              <span>取消隐牌面（翻开所有牌）</span>
+            </label>
+          </div>
           <div className="debug-row">
             <button
               type="button"

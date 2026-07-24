@@ -4,12 +4,15 @@ import { Card } from './Card';
 interface TablePlayProps {
   lastPlay?: LastPlay;
   truthPhase?: CardPhase;
+  revealAll?: boolean;
 }
 
-export function TablePlay({ lastPlay, truthPhase }: TablePlayProps) {
+export function TablePlay({ lastPlay, truthPhase, revealAll }: TablePlayProps) {
   if (!lastPlay) {
     return <div className="table-play empty">等待出牌</div>;
   }
+
+  const forceReveal = !!revealAll || lastPlay.isRevealed;
 
   return (
     <div className="table-play">
@@ -17,7 +20,7 @@ export function TablePlay({ lastPlay, truthPhase }: TablePlayProps) {
         {lastPlay.cards.map((card, index) => (
           <div
             key={card.id}
-            className={`table-card-wrapper ${lastPlay.isRevealed ? 'revealed' : ''}`}
+            className={`table-card-wrapper ${forceReveal ? 'revealed' : ''}`}
             style={{ animationDelay: `${index * 120}ms` }}
           >
             <div className="table-card-inner">
@@ -34,7 +37,7 @@ export function TablePlay({ lastPlay, truthPhase }: TablePlayProps) {
       <div className="table-play-info">
         <span className="table-play-player">{lastPlay.playerId}</span>
         <span>打出 {lastPlay.declaredCount} 张</span>
-        {lastPlay.isRevealed && truthPhase && (
+        {forceReveal && truthPhase && (
           <span className="reveal-result">
             {lastPlay.cards.some((c) => c.phase !== truthPhase && c.phase !== '道')
               ? '假牌'

@@ -7,6 +7,7 @@ interface DiceDrawProps {
   resultFace?: DivineBeast;
   loserName: string;
   canDraw: boolean;
+  revealAll?: boolean;
   onDraw: (face: DivineBeast) => void;
   onAnimationComplete: () => void;
 }
@@ -38,6 +39,7 @@ export function DiceDraw({
   resultFace,
   loserName,
   canDraw,
+  revealAll,
   onDraw,
   onAnimationComplete,
 }: DiceDrawProps) {
@@ -95,6 +97,8 @@ export function DiceDraw({
     onDraw(face);
   };
 
+  const forcedRevealAll = !!revealAll;
+
   const drawn = useMemo(() => rolledFaces.join(' '), [rolledFaces]);
   const isDeath = resultFace === DEATH_FACE;
 
@@ -103,7 +107,7 @@ export function DiceDraw({
       <div className="dice-title">{loserName} 抽取神兽</div>
       <div className="dice-card-grid">
         {slots.map((slot) => {
-          const isRevealed = revealedId === slot.id && !!resultFace;
+          const isRevealed = forcedRevealAll || (revealedId === slot.id && !!resultFace);
           const locked = !!resultFace;
           return (
             <button
