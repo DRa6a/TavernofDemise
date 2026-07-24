@@ -1,4 +1,4 @@
-import type { Player, DivineBeast } from '../core/models/types';
+import type { Player } from '../core/models/types';
 import { Hand } from './Hand';
 
 interface PlayerSeatProps {
@@ -6,7 +6,6 @@ interface PlayerSeatProps {
   isActive: boolean;
   isHuman: boolean;
   selectedIds: string[];
-  lastRolledFace?: DivineBeast;
   onToggleCard: (cardId: string) => void;
 }
 
@@ -15,7 +14,6 @@ export function PlayerSeat({
   isActive,
   isHuman,
   selectedIds,
-  lastRolledFace,
   onToggleCard,
 }: PlayerSeatProps) {
   return (
@@ -28,13 +26,19 @@ export function PlayerSeat({
         <span className="player-name">
           {player.name} {isHuman && '(你)'}
         </span>
-        <div className="player-badges">
-          {lastRolledFace && <span className="rolled-face">{lastRolledFace}</span>}
-          <span className="player-status">
-            {player.isDead ? '已出局' : player.isOutOfRound ? '本轮跳过' : `${player.hand.length} 张`}
-          </span>
-        </div>
+        <span className="player-status">
+          {player.isDead ? '已出局' : player.isOutOfRound ? '本轮跳过' : `${player.hand.length} 张`}
+        </span>
       </div>
+      {player.rolledFaces.length > 0 && (
+        <div className="rolled-faces">
+          {player.rolledFaces.map((face, index) => (
+            <span key={`${face}-${index}`} className="rolled-face">
+              {face}
+            </span>
+          ))}
+        </div>
+      )}
       {isHuman && (
         <Hand
           cards={player.hand}

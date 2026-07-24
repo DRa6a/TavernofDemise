@@ -147,10 +147,11 @@
   color: var(--text);
 }
 
-.player-badges {
+.rolled-faces {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
 }
 
 .rolled-face {
@@ -529,4 +530,11 @@
 
 .dice-result .life {
   color: #16a34a;
+}
+
+.dice-rolled {
+  font-size: 12px;
+  color: var(--text);
+  max-width: 260px;
+  text-align: center;
 }

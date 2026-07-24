@@ -76,7 +76,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const pending = state.pendingLifeDeath;
     if (!pending) return;
 
-    const faces = state.dice.availableFaces;
+    const loser = state.players.find((p) => p.id === pending.loserId);
+    const faces = loser?.availableBeasts ?? [];
     const face = faces.length > 0 ? faces[Math.floor(Math.random() * faces.length)] : '天龙' as DivineBeast;
     set({ pendingDiceResult: face });
   },

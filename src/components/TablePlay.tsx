@@ -1,27 +1,19 @@
-import { useEffect, useState } from 'react';
-import type { LastPlay } from '../core/models/types';
+import type { CardPhase, LastPlay } from '../core/models/types';
 import { Card } from './Card';
 
 interface TablePlayProps {
   lastPlay?: LastPlay;
+  truthPhase?: CardPhase;
 }
 
-export function TablePlay({ lastPlay }: TablePlayProps) {
-  const [revealKey, setRevealKey] = useState(0);
-
-  useEffect(() => {
-    if (lastPlay?.isRevealed) {
-      setRevealKey((k) => k + 1);
-    }
-  }, [lastPlay?.isRevealed]);
-
+export function TablePlay({ lastPlay, truthPhase }: TablePlayProps) {
   if (!lastPlay) {
     return <div className="table-play empty">等待出牌</div>;
   }
 
   return (
     <div className="table-play">
-      <div className="table-play-cards" key={revealKey}>
+      <div className="table-play-cards">
         {lastPlay.cards.map((card, index) => (
           <div
             key={card.id}
@@ -42,6 +34,13 @@ export function TablePlay({ lastPlay }: TablePlayProps) {
       <div className="table-play-info">
         <span className="table-play-player">{lastPlay.playerId}</span>
         <span>打出 {lastPlay.declaredCount} 张</span>
+        {lastPlay.isRevealed && truthPhase && (
+          <span className="reveal-result">
+            {lastPlay.cards.some((c) => c.phase !== truthPhase && c.phase !== '道')
+              ? '假牌'
+              : '真牌'}
+          </span>
+        )}
       </div>
     </div>
   );

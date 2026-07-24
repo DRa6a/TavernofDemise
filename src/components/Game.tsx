@@ -29,12 +29,6 @@ export function Game() {
   const humanPlayer = gameState.players.find((p) => p.id === HUMAN_ID);
   const opponents = gameState.players.filter((p) => p.id !== HUMAN_ID);
 
-  const lastRolledMap = new Map(
-    gameState.history
-      .filter((e) => e.type === 'DICE_ROLLED')
-      .map((e) => [e.playerId, e.face])
-  );
-
   const isLifeDeath = gameState.phase === GamePhase.LIFE_DEATH;
   const pendingLoser = isLifeDeath && gameState.pendingLifeDeath
     ? gameState.players.find((p) => p.id === gameState.pendingLifeDeath!.loserId)
@@ -82,7 +76,6 @@ export function Game() {
               isActive={player.id === gameState.activePlayerId}
               isHuman={false}
               selectedIds={[]}
-              lastRolledFace={lastRolledMap.get(player.id)}
               onToggleCard={() => {}}
             />
           ))}
@@ -91,7 +84,8 @@ export function Game() {
         <section className="table-center">
           {isLifeDeath && pendingLoser ? (
             <DicePool
-              availableFaces={gameState.dice.availableFaces}
+              availableBeasts={pendingLoser.availableBeasts}
+              rolledFaces={pendingLoser.rolledFaces}
               resultFace={pendingDiceResult}
               loserName={pendingLoser.name}
               canDraw={pendingLoser.isHuman}
@@ -100,7 +94,7 @@ export function Game() {
             />
           ) : (
             <>
-              <TablePlay lastPlay={gameState.lastPlay} />
+              <TablePlay lastPlay={gameState.lastPlay} truthPhase={gameState.truthPhase} />
               <ActionPanel
                 gameState={gameState}
                 selectedCount={selectedCardIds.length}
@@ -119,7 +113,6 @@ export function Game() {
               isActive={humanPlayer.id === gameState.activePlayerId}
               isHuman={true}
               selectedIds={selectedCardIds}
-              lastRolledFace={lastRolledMap.get(humanPlayer.id)}
               onToggleCard={toggleCard}
             />
           )}

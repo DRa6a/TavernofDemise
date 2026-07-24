@@ -56,12 +56,15 @@ export class RoundManager {
     const deck = DeckBuilder.buildStandardDeck();
     const shuffled = this.random.shuffle(deck);
 
+    const allFaces = Object.values(DivineBeastEnum);
     const players: Player[] = configs.map((config, index) => ({
       ...config,
       hand: [],
       isDead: false,
       isOutOfRound: false,
       position: index,
+      availableBeasts: [...allFaces],
+      rolledFaces: [],
     }));
 
     this.state = {
@@ -247,20 +250,18 @@ export class RoundManager {
     const loser = this.state.players.find((p) => p.id === loserId);
     if (!loser) throw new Error('受判玩家不存在');
 
-    if (this.state.dice.availableFaces.length === 0) {
-      this.state.dice.availableFaces = [DivineBeastEnum.TIAN_LONG];
+    if (loser.availableBeasts.length === 0) {
+      loser.availableBeasts = [DivineBeastEnum.TIAN_LONG];
     }
 
-    const finalFace = face ?? this.state.dice.availableFaces[Math.floor(this.random.next() * this.state.dice.availableFaces.length)];
+    const finalFace = face ?? loser.availableBeasts[Math.floor(this.random.next() * loser.availableBeasts.length)];
 
     this.emit({ type: 'DICE_ROLLED', playerId: loserId, face: finalFace });
 
     const result = this.ruleEngine.resolveDice(loser, finalFace);
 
-    if (finalFace !== DivineBeastEnum.TIAN_LONG) {
-      this.state.deadFaces.push(finalFace);
-      this.state.dice.availableFaces = this.state.dice.availableFaces.filter((f) => f !== finalFace);
-    }
+    loser.availableBeasts = loser.availableBeasts.filter((f) => f !== finalFace);
+    loser.rolledFaces.push(finalFace);
 
     this.state.pendingLifeDeath = undefined;
 

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { DivineBeast } from '../core/models/types';
 
 interface DicePoolProps {
-  availableFaces: DivineBeast[];
+  availableBeasts: DivineBeast[];
+  rolledFaces: DivineBeast[];
   resultFace?: DivineBeast;
   loserName: string;
   canDraw: boolean;
@@ -11,7 +12,8 @@ interface DicePoolProps {
 }
 
 export function DicePool({
-  availableFaces,
+  availableBeasts,
+  rolledFaces,
   resultFace,
   loserName,
   canDraw,
@@ -23,18 +25,20 @@ export function DicePool({
   const timerRef = useRef<number | null>(null);
   const hasAnimatedRef = useRef(false);
 
+  const displayFaces = availableBeasts.length > 0 ? availableBeasts : ['天龙' as DivineBeast];
+
   useEffect(() => {
     if (!resultFace || hasAnimatedRef.current) return;
     hasAnimatedRef.current = true;
 
-    const resultIndex = availableFaces.indexOf(resultFace);
+    const resultIndex = displayFaces.indexOf(resultFace);
     const safeIndex = resultIndex >= 0 ? resultIndex : 0;
     let step = 0;
     const totalSteps = 20 + safeIndex;
     let delay = 60;
 
     const run = () => {
-      setHighlightIndex((prev) => (prev + 1) % availableFaces.length);
+      setHighlightIndex((prev) => (prev + 1) % displayFaces.length);
       step += 1;
 
       if (step >= totalSteps) {
@@ -55,13 +59,13 @@ export function DicePool({
     return () => {
       if (timerRef.current) window.clearTimeout(timerRef.current);
     };
-  }, [resultFace, availableFaces, onAnimationComplete]);
+  }, [resultFace, displayFaces, onAnimationComplete]);
 
   return (
     <div className="dice-pool">
       <div className="dice-title">{loserName} 面临生死判定</div>
       <div className="dice-faces">
-        {availableFaces.map((face, index) => (
+        {displayFaces.map((face, index) => (
           <div
             key={face}
             className={`dice-face ${index === highlightIndex ? 'highlight' : ''} ${showResult && face === resultFace ? 'final' : ''}`}
@@ -70,6 +74,11 @@ export function DicePool({
           </div>
         ))}
       </div>
+      {rolledFaces.length > 0 && (
+        <div className="dice-rolled">
+          已抽：{rolledFaces.join(' ')}
+        </div>
+      )}
       {!resultFace && (
         <button type="button" className="btn-primary dice-draw-btn" disabled={!canDraw} onClick={onDraw}>
           {canDraw ? '抽取神兽' : '等待抽取'}

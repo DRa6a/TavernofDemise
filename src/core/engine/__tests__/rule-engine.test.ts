@@ -16,6 +16,8 @@ function createPlayer(id: string, hand: Card[] = []): Player {
     isDead: false,
     isOutOfRound: false,
     position: 0,
+    availableBeasts: ['天龙', '白羊', '青龙', '白虎', '朱雀', '玄武'],
+    rolledFaces: [],
   };
 }
 

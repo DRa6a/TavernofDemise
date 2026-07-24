@@ -19,6 +19,8 @@ export interface Player {
   isDead: boolean;
   isOutOfRound: boolean;
   position: number;
+  availableBeasts: DivineBeast[];
+  rolledFaces: DivineBeast[];
 }
 
 export interface PlayerConfig {
