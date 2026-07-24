@@ -82,6 +82,7 @@ export function Game() {
         </section>
 
         <section className="table-center">
+          <TablePlay lastPlay={gameState.lastPlay} truthPhase={gameState.truthPhase} />
           {isLifeDeath && pendingLoser ? (
             <DicePool
               availableBeasts={pendingLoser.availableBeasts}
@@ -93,16 +94,13 @@ export function Game() {
               onAnimationComplete={resolveDiceAnimation}
             />
           ) : (
-            <>
-              <TablePlay lastPlay={gameState.lastPlay} truthPhase={gameState.truthPhase} />
-              <ActionPanel
-                gameState={gameState}
-                selectedCount={selectedCardIds.length}
-                onPlay={() => playCards(selectedCardIds)}
-                onChallenge={() => openPhase('challenge')}
-                onPass={() => openPhase('pass')}
-              />
-            </>
+            <ActionPanel
+              gameState={gameState}
+              selectedCount={selectedCardIds.length}
+              onPlay={() => playCards(selectedCardIds)}
+              onChallenge={() => openPhase('challenge')}
+              onPass={() => openPhase('pass')}
+            />
           )}
         </section>
 
