@@ -1,0 +1,75 @@
+import { Card, CardPhase, DivineBeast, GameState, Player } from '../models/types';
+import { DEATH_FACE, MAX_PLAY_CARDS, MIN_PLAY_CARDS } from '../../utils/constants';
+
+export interface ChallengeResult {
+  isFake: boolean;
+  challengerWins: boolean;
+}
+
+export interface LifeDeathResult {
+  face: DivineBeast;
+  isDead: boolean;
+}
+
+export class RuleEngine {
+  canPlay(player: Player, cards: Card[], state: GameState): boolean {
+    if (state.activePlayerId !== player.id) return false;
+    if (cards.length < MIN_PLAY_CARDS || cards.length > MAX_PLAY_CARDS) return false;
+
+    const handIds = new Set(player.hand.map((c) => c.id));
+    return cards.every((card) => handIds.has(card.id));
+  }
+
+  isPlayFake(cards: Card[], truthPhase: CardPhase): boolean {
+    return cards.some((card) => card.phase !== truthPhase && card.phase !== CardPhase.DAO);
+  }
+
+  canChallenge(state: GameState): boolean {
+    if (!state.lastPlay) return false;
+    if (state.lastPlay.isRevealed) return false;
+    if (state.activePlayerId === state.lastPlay.playerId) return false;
+
+    const challenger = state.players.find((p) => p.id === state.activePlayerId);
+    return challenger ? !challenger.isDead && !challenger.isOutOfRound : false;
+  }
+
+  mustChallenge(state: GameState): boolean {
+    if (!this.canChallenge(state)) return false;
+
+    const alivePlayers = state.players.filter((p) => !p.isDead);
+    return alivePlayers.length <= 2;
+  }
+
+  resolveChallenge(state: GameState): ChallengeResult {
+    if (!state.lastPlay || !state.truthPhase) {
+      throw new Error('无法质疑：缺少上一次出牌或真牌信息');
+    }
+
+    const isFake = this.isPlayFake(state.lastPlay.cards, state.truthPhase);
+    const challengerWins = isFake;
+    return { isFake, challengerWins };
+  }
+
+  resolveDice(player: Player, face: DivineBeast): LifeDeathResult {
+    const isDead = face === DEATH_FACE;
+    return { face, isDead };
+  }
+
+  getNextActivePlayer(state: GameState): string {
+    const currentPlayer = state.players.find((p) => p.id === state.activePlayerId);
+    if (!currentPlayer) return state.activePlayerId;
+
+    const playerCount = state.players.length;
+    let nextIndex = (currentPlayer.position + 1) % playerCount;
+
+    for (let i = 0; i < playerCount; i++) {
+      const candidate = state.players.find((p) => p.position === nextIndex);
+      if (candidate && !candidate.isDead && !candidate.isOutOfRound) {
+        return candidate.id;
+      }
+      nextIndex = (nextIndex + 1) % playerCount;
+    }
+
+    return currentPlayer.id;
+  }
+}
