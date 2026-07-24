@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DivineBeast } from '../core/models/types';
 
 interface DiceDrawProps {
@@ -53,7 +53,10 @@ export function DiceDraw({
     };
   }, [resultFace, availableBeasts, onAnimationComplete]);
 
-  const displayFaces = availableBeasts.length > 0 ? availableBeasts : ['天龙' as DivineBeast];
+  const displayFaces = useMemo(() => {
+    const faces = availableBeasts.length > 0 ? [...availableBeasts] : ['天龙' as DivineBeast];
+    return faces.sort(() => Math.random() - 0.5);
+  }, [availableBeasts.join(',')]);
 
   return (
     <div className="dice-draw">

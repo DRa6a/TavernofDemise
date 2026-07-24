@@ -29,6 +29,30 @@ export function Game() {
     toggleCard,
   } = useGameStore();
 
+  useEffect(() => {
+    if (!gameState) return;
+    if (gameState.phase === GamePhase.GAME_OVER && gameState.winnerId) {
+      const winner = gameState.players.find((p) => p.id === gameState.winnerId);
+      if (winner) {
+        setGameOverOverlay({ show: true, name: winner.name });
+      }
+    }
+  }, [gameState?.phase, gameState?.winnerId, gameState?.players]);
+
+  useEffect(() => {
+    if (!gameState) return;
+    const lastEvent = gameState.history[gameState.history.length - 1];
+    if (lastEvent?.type === 'PLAYER_DIED') {
+      const player = gameState.players.find((p) => p.id === lastEvent.playerId);
+      if (player) {
+        setDeathOverlay({ show: true, name: player.name });
+        const timer = window.setTimeout(() => setDeathOverlay(null), 2200);
+        return () => window.clearTimeout(timer);
+      }
+    }
+    return undefined;
+  }, [gameState?.history.length, gameState?.history, gameState?.players]);
+
   if (!gameState) {
     return <StartScreen onStart={startGame} />;
   }
@@ -40,28 +64,6 @@ export function Game() {
   const pendingLoser = isLifeDeath && gameState.pendingLifeDeath
     ? gameState.players.find((p) => p.id === gameState.pendingLifeDeath!.loserId)
     : undefined;
-
-  useEffect(() => {
-    if (gameState.phase === GamePhase.GAME_OVER && gameState.winnerId) {
-      const winner = gameState.players.find((p) => p.id === gameState.winnerId);
-      if (winner) {
-        setGameOverOverlay({ show: true, name: winner.name });
-      }
-    }
-  }, [gameState.phase, gameState.winnerId, gameState.players]);
-
-  useEffect(() => {
-    const lastEvent = gameState.history[gameState.history.length - 1];
-    if (lastEvent?.type === 'PLAYER_DIED') {
-      const player = gameState.players.find((p) => p.id === lastEvent.playerId);
-      if (player) {
-        setDeathOverlay({ show: true, name: player.name });
-        const timer = window.setTimeout(() => setDeathOverlay(null), 2200);
-        return () => window.clearTimeout(timer);
-      }
-    }
-    return undefined;
-  }, [gameState.history.length, gameState.history, gameState.players]);
 
   return (
     <div className="game">
@@ -111,7 +113,7 @@ export function Game() {
           ))}
         </section>
 
-        {!revealDelay && !isLifeDeath && <TruthBanner truthPhase={gameState.truthPhase} />}
+        {!isLifeDeath && <TruthBanner truthPhase={gameState.truthPhase} />}
 
         <section className="table-center">
           {revealDelay ? (

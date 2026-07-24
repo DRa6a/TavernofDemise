@@ -28,7 +28,12 @@ export class RuleEngine {
     if (!this.canChallenge(state)) return false;
 
     const alivePlayers = state.players.filter((p) => !p.isDead);
-    return alivePlayers.length <= 2;
+    if (alivePlayers.length <= 2) return true;
+
+    const aliveWithHand = alivePlayers.filter((p) => p.hand.length > 0);
+    if (aliveWithHand.length === 1) return true;
+
+    return false;
   }
 
   resolveChallenge(state: GameState): ChallengeResult {
