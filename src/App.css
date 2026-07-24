@@ -32,6 +32,31 @@
   overflow: hidden;
 }
 
+/* 大屏：放宽最大宽度，牌面与字号随之放大，避免空旷 */
+@media (min-width: 1280px) {
+  #root {
+    max-width: min(1400px, 92vw);
+  }
+  :root {
+    --card-w: clamp(44px, 4.4vw, 60px);
+    --table-card-w: clamp(42px, 4vw, 56px);
+    --dice-card-w: clamp(50px, 4.4vw, 64px);
+    --header-pad-y: clamp(10px, 1vw, 16px);
+    --header-pad-x: clamp(16px, 2vw, 28px);
+    --board-pad-y: clamp(10px, 1vw, 16px);
+    --board-pad-x: clamp(16px, 2vw, 28px);
+    --board-gap: clamp(10px, 1vw, 16px);
+  }
+}
+
+@media (min-width: 1600px) {
+  :root {
+    --card-w: clamp(48px, 4vw, 68px);
+    --table-card-w: clamp(46px, 3.6vw, 60px);
+    --dice-card-w: clamp(54px, 4vw, 72px);
+  }
+}
+
 @media (max-width: 640px) {
   #root {
     border-inline: none;
@@ -133,6 +158,13 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(clamp(110px, 18vw, 160px), 1fr));
   gap: clamp(6px, 1.2vw, 10px);
+}
+
+@media (min-width: 1280px) {
+  .opponents {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+  }
 }
 
 .player-seat {

@@ -24,9 +24,12 @@ export function TablePlay({ lastPlay, truthPhase, revealAll }: TablePlayProps) {
             style={{ animationDelay: `${index * 120}ms` }}
           >
             <div className="table-card-inner">
-              <div className="table-card-back">
-                <Card card={card} hidden />
-              </div>
+              {/* 翻开前显示牌背；翻开完成后彻底卸载 DOM，避免任何渲染场景下透出 */}
+              {!forceReveal && (
+                <div className="table-card-back">
+                  <Card card={card} hidden />
+                </div>
+              )}
               <div className="table-card-front">
                 <Card card={card} />
               </div>
