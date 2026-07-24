@@ -25,10 +25,10 @@ export function TablePlay({ lastPlay, truthPhase, revealAll }: TablePlayProps) {
           >
             <div className="table-card-inner">
               <div className="table-card-back">
-                <Card card={card} hidden disabled />
+                <Card card={card} hidden />
               </div>
               <div className="table-card-front">
-                <Card card={card} disabled />
+                <Card card={card} />
               </div>
             </div>
           </div>

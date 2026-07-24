@@ -292,6 +292,17 @@
 
 .table-card-front {
   transform: rotateY(180deg);
+  z-index: 2;
+}
+
+.table-card-back {
+  z-index: 1;
+}
+
+/* 翻开时彻底隐藏牌背，防止 backface-visibility 失效时透出图案 */
+.table-card-wrapper.revealed .table-card-back {
+  opacity: 0;
+  visibility: hidden;
 }
 
 .table-card-back .card,
