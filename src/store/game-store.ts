@@ -336,8 +336,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     set({ gameState: { ...manager.getState() } });
     // 使用回响后暂停进程
+    const defs = get().echoDefs;
     const reason = (modApi && typeof modApi.useEcho === 'function')
-      ? `已使用：${(echoDefs as Array<{ id: string; name: string }>).find((d) => d.id === echoId)?.name ?? echoId}`
+      ? `已使用：${defs.find((d) => d.id === echoId)?.name ?? echoId}`
       : `已使用：${echoId}`;
     set({
       echoPause: { playerId, echoId, reason },

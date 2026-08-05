@@ -630,6 +630,67 @@
   opacity: 0.7;
 }
 
+/* 回响列表：直接可点击的 div.chip 布局 */
+.echo-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.echo-chip {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.1s ease;
+  min-width: 80px;
+  max-width: 220px;
+}
+.echo-chip strong {
+  font-size: 13px;
+}
+.echo-chip .echo-count {
+  color: var(--accent);
+  font-weight: 600;
+}
+.echo-chip .echo-effect {
+  font-size: 11px;
+  opacity: 0.7;
+  white-space: normal;
+}
+.echo-chip.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  border-style: dashed;
+}
+
+/* 「可用」回响高亮（亮起状态） */
+.echo-group:not(.muted) .echo-chip {
+  border-color: var(--accent);
+  background: rgba(196, 30, 58, 0.08);
+  box-shadow: 0 0 0 1px rgba(196, 30, 58, 0.25) inset;
+}
+.echo-group:not(.muted) .echo-chip:hover {
+  background: rgba(196, 30, 58, 0.18);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(196, 30, 58, 0.25);
+}
+.echo-group:not(.muted) .echo-chip:active {
+  transform: translateY(0);
+}
+.echo-group:not(.muted) .echo-chip::after {
+  content: " ·可点";
+  color: var(--accent);
+  font-size: 10px;
+  opacity: 0.7;
+  margin-left: 4px;
+}
+
 .echo-target-modal {
   position: fixed;
   inset: 0;
@@ -653,21 +714,6 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-/* 「可用」回响高亮（带 trigger 标识） */
-.echo-group:not(.muted) button {
-  border-color: var(--accent);
-  background: rgba(196, 30, 58, 0.08);
-}
-.echo-group:not(.muted) button:hover {
-  background: rgba(196, 30, 58, 0.18);
-}
-.echo-group:not(.muted) button::after {
-  content: " ·可点";
-  color: var(--accent);
-  font-size: 10px;
-  opacity: 0.7;
 }
 
 /* 使用回响后暂停遮罩 */

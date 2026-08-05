@@ -127,31 +127,34 @@ export function EchoPanel({ player, allPlayers, phase, echoDefs, onUseEcho }: Ec
           {usable.length > 0 && (
             <div className="echo-group">
               <small>当前阶段可用</small>
-              <ul>
+              <div className="echo-list">
                 {usable.map((e) => (
-                  <li key={e.id}>
-                    <button type="button" onClick={() => tryUse(e.id)}>
-                      <strong>{e.def.name}</strong> <small>×{e.remaining}</small>
-                    </button>
+                  <div
+                    key={e.id}
+                    className="echo-chip"
+                    title={e.def.effect}
+                    onClick={() => tryUse(e.id)}
+                  >
+                    <strong>{e.def.name}</strong>
+                    <small className="echo-count">×{e.remaining}</small>
                     <span className="echo-effect">{e.def.effect}</span>
-                  </li>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
           )}
           {unusable.length > 0 && (
             <div className="echo-group muted">
               <small>当前阶段不可用</small>
-              <ul>
+              <div className="echo-list">
                 {unusable.map((e) => (
-                  <li key={e.id}>
-                    <span className="echo-disabled">
-                      <strong>{e.def.name}</strong> <small>×{e.remaining}</small>
-                    </span>
+                  <div key={e.id} className="echo-chip disabled" title={e.def.effect}>
+                    <strong>{e.def.name}</strong>
+                    <small className="echo-count">×{e.remaining}</small>
                     <span className="echo-effect">{e.def.effect}</span>
-                  </li>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
           )}
         </div>
