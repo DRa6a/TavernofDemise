@@ -49,6 +49,10 @@ export class RoundManager {
     this.modLoader = loader;
   }
 
+  getModLoader(): ModLoader | null {
+    return this.modLoader;
+  }
+
   getState(): GameState {
     return this.state;
   }
@@ -64,6 +68,7 @@ export class RoundManager {
       dice: { availableFaces: Object.values(DivineBeastEnum) },
       deadFaces: [],
       history: [],
+      modData: {},
     };
   }
 
@@ -71,8 +76,15 @@ export class RoundManager {
     this.state.history.push(event);
   }
 
+  /**
+   * 触发 mod 钩子。基座在调用前同步 currentState，
+   * 让 mod 通过 api.state 拿到的是「当前最新」state。
+   */
   private hook(hook: keyof ModHooks, ...args: unknown[]): void {
-    if (this.modLoader) this.modLoader.triggerHook(hook, ...args);
+    if (this.modLoader) {
+      this.modLoader.setCurrentState?.(this.state);
+      this.modLoader.triggerHook(hook, ...args);
+    }
   }
 
   startGame(configs: PlayerConfig[]): void {
@@ -80,7 +92,8 @@ export class RoundManager {
       throw new Error(`玩家数量必须在 ${MIN_PLAYERS}~${MAX_PLAYERS} 之间`);
     }
 
-    const deck = DeckBuilder.buildStandardDeck();
+    const baseDeck = DeckBuilder.buildStandardDeck();
+    const deck = this.modLoader ? this.modLoader.applyDeckPatches(baseDeck) : baseDeck;
     const shuffled = this.random.shuffle(deck);
 
     const allFaces = Object.values(DivineBeastEnum);
@@ -110,16 +123,20 @@ export class RoundManager {
   }
 
   /**
-   * 激发回合（mod 扩展）：若 mod 注册了 `before-election` 阻塞阶段，
-   * 则切换到 INSPIRING 阶段等待 UI 完成；否则直接进入选举。
+   * 通用「阻塞阶段」入口：
+   * - 如果 mod 注册了 `insertAt = before-election` 且 `blocking = true` 的阶段，
+   *   就把 game.phase 切到 INSPIRING 并写入 `modData.customPhase = phase.id`，
+   *   等 mod 调 `api.phase.complete()` 继续。
+   * - 否则直接进入选举。
+   *
+   * 本函数**不**硬编码任何 mod 业务语义；mod 自行决定这个阻塞阶段是什么。
    */
   private beginInspirePhase(): void {
     const blocking = this.findBlockingPhase('before-election');
     if (blocking) {
       this.state.phase = GamePhase.INSPIRING;
-      this.state.modData = { ...(this.state.modData ?? {}), __inspirePhaseId: blocking.id };
-      // 让 mod 知道「现在进入激发回合」—— 真正派发回响放在 completeInspirePhase
-      // 这里先发一个事件，方便 UI 显示「激发回合开始」提示
+      if (!this.state.modData) this.state.modData = {};
+      (this.state.modData as Record<string, unknown>).customPhase = blocking.id;
       this.emit({ type: 'INSPIRE_PHASE_STARTED', phaseId: blocking.id } as GameEvent);
       return;
     }
@@ -127,40 +144,17 @@ export class RoundManager {
   }
 
   /**
-   * 玩家完成激发回合操作（看到/丢弃/重抽）后调用，进入选举首位玩家
+   * 完成一个 mod 阻塞阶段。mod 调 `api.phase.complete()` 时，
+   * 会经由 store 转发到 RoundManager.completeInspirePhase。
    */
   completeInspirePhase(): void {
     if (this.state.phase !== GamePhase.INSPIRING) {
       throw new Error('当前不是激发回合');
     }
-    // 触发 mod 的 onBeforeElection，让它为玩家抽取回响
-    this.electFirstPlayer();
-  }
-
-  /** 丢弃一个回响并重新抽取（激发回合的可选操作） */
-  rerollEcho(playerId: string, echoIdToDiscard: string): boolean {
-    if (this.state.phase !== GamePhase.INSPIRING) return false;
-    const player = this.state.players.find((p) => p.id === playerId);
-    if (!player || !player.modData) return false;
-    const echoes = (player.modData.echoes as Array<{ id: string; remaining: number }>) ?? [];
-    const idx = echoes.findIndex((e) => e.id === echoIdToDiscard);
-    if (idx < 0) return false;
-    // 调 mod 提供的 grantEchoes 重新拿一个（实际为「重抽 1 个」）
-    const mod = this.modLoader?.getById('huixiang');
-    if (mod && typeof (mod as Record<string, unknown>).grantEchoes === 'function') {
-      const grant = (mod as Record<string, unknown>).grantEchoes as (
-        p: Player,
-        rng: () => number,
-      ) => Array<{ id: string; remaining: number }>;
-      // 丢弃选中的，再补 1 个新的
-      echoes.splice(idx, 1);
-      const rng = () => this.random.next();
-      const fresh = grant(player, rng);
-      if (fresh.length > 0) echoes.push(fresh[0]);
-      player.modData.echoes = echoes;
-      return true;
+    if (this.state.modData) {
+      delete (this.state.modData as Record<string, unknown>).customPhase;
     }
-    return false;
+    this.electFirstPlayer();
   }
 
   private findBlockingPhase(point: string): { id: string; name: string } | null {
@@ -266,7 +260,7 @@ export class RoundManager {
 
     this.hook('onBeforePlay', this.state, player, cardIds);
 
-    // 「哀昏」状态：跳过本回合出牌
+    // 「哀昏」状态：跳过本回合出牌（由 mod 决定具体状态 id；这里保留 base 的默认行为）
     if (this.hasState(player, 'aihun')) {
       this.clearState(player, 'aihun');
       player.isOutOfRound = true;
@@ -331,7 +325,7 @@ export class RoundManager {
     const challenger = this.state.players.find((p) => p.id === this.state.activePlayerId);
     if (!challenger) throw new Error('当前玩家不存在');
 
-    // 「受控」状态：必须质疑
+    // 「受控」状态：必须质疑（由 mod 决定具体状态 id；这里保留 base 的默认行为）
     if (decision === 'pass' && this.hasState(challenger, 'shoukong')) {
       decision = 'challenge';
     }
@@ -352,12 +346,11 @@ export class RoundManager {
         this.hook('onAfterOpen', this.state, result.isFake);
       }
 
-      // 「自我质疑跳过大回合」：mod 在 onBeforeOpen 里标记 state.modData.skipBigRound
+      // mod 标记：自我质疑跳过大回合。mod 在 onBeforeOpen/onAfterOpen 中写入
       if (this.state.modData && (this.state.modData as Record<string, unknown>).skipBigRound) {
         this.state.players.forEach((p) => {
           if (!p.isDead) p.isOutOfRound = true;
         });
-        // 清理标记 + 把最后的牌丢入弃牌堆
         delete (this.state.modData as Record<string, unknown>).skipBigRound;
         this.hook('onBigRoundEnd', this.state, this.state.currentRound);
         if (this.state.lastPlay) {
@@ -397,7 +390,7 @@ export class RoundManager {
 
     this.hook('onBeforeLifeDeath', this.state, loser);
 
-    // 「天行健」强制改面：mod 在 onBeforeLifeDeath 写入 loser.modData.__forcedFace
+    // mod 标记：强制改面（mod 在 onBeforeLifeDeath 写入 loser.modData.__forcedFace）
     const forced = loser.modData
       ? (loser.modData as Record<string, unknown>).__forcedFace
       : undefined;
@@ -418,14 +411,8 @@ export class RoundManager {
     if (result.isDead) {
       loser.isDead = true;
       this.emit({ type: 'PLAYER_DIED', playerId: loserId });
-      // 让 mod 有机会用「不灭」复活 + 挂「末命」
+      // mod 可在 onPlayerDied 中通过 api.player 复活（设 isDead = false）+ 挂「末命」
       this.hook('onPlayerDied', this.state, loser);
-      // 若 mod 把 isDead 改回 false，给玩家挂「末命」并增加存活时间
-      if (!loser.isDead) {
-        if (!loser.stateEffectIds?.includes('momming')) {
-          loser.stateEffectIds = [...(loser.stateEffectIds ?? []), 'momming'];
-        }
-      }
     }
 
     this.hook('onAfterLifeDeath', this.state, loser, !result.isDead);
@@ -453,7 +440,7 @@ export class RoundManager {
   }
 
   // ────────────────────────────────────────────────────────────
-  // 模组相关辅助
+  // 模组相关辅助（通用：状态/能力的增删查，所有语义由 mod 自己解释）
   // ────────────────────────────────────────────────────────────
 
   /** 玩家是否携带指定状态 */
@@ -464,8 +451,12 @@ export class RoundManager {
   /** 移除玩家身上的某个状态 */
   clearState(player: Player, stateId: string): void {
     player.stateEffectIds = (player.stateEffectIds ?? []).filter((s) => s !== stateId);
-    if (player.modData && (player.modData as Record<string, unknown>).stateDurations) {
-      delete (player.modData as Record<string, unknown>).stateDurations[stateId];
+    if (player.modData) {
+      const md = player.modData as Record<string, unknown>;
+      const dur = md.stateDurations as Record<string, number> | undefined;
+      if (dur) {
+        delete dur[stateId];
+      }
     }
   }
 
@@ -482,23 +473,32 @@ export class RoundManager {
   }
 
   /**
-   * 使用回响（mod 提供的 useEcho）：扣除 1 次使用次数并返回 {ok, reason}
-   * 失败时由 UI 决定弹什么提示
+   * 通用「使用能力」入口：基座只负责「调用 mod 的 useAbility + 暂停游戏」，
+   * 所有效果（包括扣次数、副作用）都在 mod 脚本中实现。
+   * 失败时由 UI 决定弹什么提示。
    */
-  useEcho(player: Player, echoId: string): { ok: boolean; reason?: string } {
-    const mod = this.modLoader?.getById('huixiang');
-    if (!mod || typeof (mod as Record<string, unknown>).useEcho !== 'function') {
-      return { ok: false, reason: 'no_mod' };
+  useAbility(
+    player: Player,
+    abilityId: string,
+    target?: Player,
+  ): { ok: boolean; reason?: string } {
+    for (const mod of this.modLoader?.getActiveMods() ?? []) {
+      const fn = (mod as unknown as { useAbility?: (p: Player, id: string, t?: Player) => { ok: boolean; reason?: string } })
+        .useAbility;
+      if (typeof fn === 'function') {
+        try {
+          return fn(player, abilityId, target);
+        } catch (e) {
+          return { ok: false, reason: `mod ${mod.id} useAbility 报错：${(e as Error).message}` };
+        }
+      }
     }
-    return ((mod as Record<string, unknown>).useEcho as (p: Player, id: string) => {
-      ok: boolean;
-      reason?: string;
-    })(player, echoId);
+    return { ok: false, reason: 'no_mod_with_useAbility' };
   }
 
-  /** 当前 mod 注册的所有回响（供 UI 列表面板使用） */
-  listEchoes() {
-    return this.modLoader?.listEchoes() ?? [];
+  /** 当前 mod 注册的所有能力（供 UI 列表面板使用） */
+  listAbilities() {
+    return this.modLoader?.listAbilities() ?? [];
   }
 
   private getOtherAlivePlayer(excludeId: string): string | undefined {

@@ -60,6 +60,9 @@ export interface GameState {
   pendingLifeDeath?: { loserId: string };
   winnerId?: string;
   history: GameEvent[];
+  /** 模组为整个游戏状态注入的临时数据（如当前阻塞的自定义阶段 id）。
+   *  基座只读写 `modData.customPhase`；其余字段由 mod 自行约定。 */
+  modData?: Record<string, unknown>;
 }
 
 export type GameEvent =

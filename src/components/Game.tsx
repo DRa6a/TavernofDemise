@@ -10,8 +10,7 @@ import { TruthBanner } from './TruthBanner';
 import { DebugPanel } from './DebugPanel';
 import { GameOverOverlay } from './GameOverOverlay';
 import { DeathOverlay } from './DeathOverlay';
-import { InspirePhase } from './InspirePhase';
-import { EchoPanel } from './EchoPanel';
+import { ModSlot } from '../core/mod/ui-slots';
 import { GamePhase } from '../utils/constants';
 
 export function Game() {
@@ -30,13 +29,10 @@ export function Game() {
     drawDice,
     resolveDiceAnimation,
     toggleCard,
-    completeInspirePhase,
-    rerollEcho,
-    useEcho,
-    echoDefs,
+    abilityDefs,
     stateDefs,
-    echoPause,
-    resumeAfterEcho,
+    abilityPause,
+    resumeAfterAbility,
   } = useGameStore();
 
   useEffect(() => {
@@ -86,6 +82,7 @@ export function Game() {
           </span>
         </div>
         <div className="header-right">
+          <ModSlot slot="game:header-extra" />
           <DebugPanel />
           <button type="button" className="btn-text" onClick={() => setLogOpen((v) => !v)}>
             {logOpen ? '收起记录' : '对局记录'}
@@ -121,23 +118,19 @@ export function Game() {
               selectedIds={[]}
               revealAll={revealAll}
               onToggleCard={() => {}}
-              echoDefs={echoDefs}
+              abilityDefs={abilityDefs}
               stateDefs={stateDefs}
             />
           ))}
         </section>
 
-        {/* 真牌相：开牌翻开动画期间仍可见，仅在真正进入抽神兽界面时被 DiceDraw 覆盖 */}
         {!(isLifeDeath && !revealDelay) && <TruthBanner truthPhase={gameState.truthPhase} />}
 
         <section className="table-center">
           {isInspiring ? (
-            <InspirePhase
-              players={gameState.players}
-              echoDefs={echoDefs}
-              onReroll={rerollEcho}
-              onConfirm={completeInspirePhase}
-            />
+            // mod 通过「table-center:overlay」槽注入的激发阶段 UI
+            // 该槽的渲染函数应当自带「进入对局」按钮（调 completeInspirePhase）
+            <ModSlot slot="table-center:overlay" />
           ) : revealDelay ? (
             <TablePlay lastPlay={gameState.lastPlay} truthPhase={gameState.truthPhase} revealAll={revealAll} />
           ) : isLifeDeath && pendingLoser ? (
@@ -161,15 +154,8 @@ export function Game() {
                 onChallenge={() => openPhase('challenge')}
                 onPass={() => openPhase('pass')}
               />
-              {humanPlayer && echoDefs.length > 0 && !isLifeDeath && (
-                <EchoPanel
-                  player={humanPlayer}
-                  allPlayers={gameState.players}
-                  phase={gameState.phase}
-                  echoDefs={echoDefs}
-                  onUseEcho={(p, e, t) => useEcho(p.id, e, t?.id)}
-                />
-              )}
+              {/* mod 通过「action-area:side」槽注入的能力面板/操作 */}
+              <ModSlot slot="action-area:side" />
             </>
           )}
         </section>
@@ -184,7 +170,7 @@ export function Game() {
               selectedIds={selectedCardIds}
               revealAll={revealAll}
               onToggleCard={toggleCard}
-              echoDefs={echoDefs}
+              abilityDefs={abilityDefs}
               stateDefs={stateDefs}
             />
           )}
@@ -193,26 +179,26 @@ export function Game() {
 
       {gameOverOverlay?.show && <GameOverOverlay winnerName={gameOverOverlay.name} />}
       {deathOverlay?.show && <DeathOverlay playerName={deathOverlay.name} />}
-      {echoPause && <EchoPauseOverlay info={echoPause} onResume={resumeAfterEcho} />}
+      {abilityPause && <AbilityPauseOverlay info={abilityPause} onResume={resumeAfterAbility} />}
     </div>
   );
 }
 
-interface EchoPauseOverlayProps {
-  info: { playerId: string; echoId: string; reason: string };
+interface AbilityPauseOverlayProps {
+  info: { playerId: string; abilityId: string; reason: string };
   onResume: () => void;
 }
 
-function EchoPauseOverlay({ info, onResume }: EchoPauseOverlayProps) {
+function AbilityPauseOverlay({ info, onResume }: AbilityPauseOverlayProps) {
   const isHuman = info.playerId === 'p0';
   return (
-    <div className="echo-pause-overlay" onClick={isHuman ? onResume : undefined}>
-      <div className="echo-pause-card" onClick={(e) => e.stopPropagation()}>
+    <div className="ability-pause-overlay" onClick={isHuman ? onResume : undefined}>
+      <div className="ability-pause-card" onClick={(e) => e.stopPropagation()}>
         <h3>⏸  进程暂停</h3>
-        <p className="echo-pause-reason">{info.reason}</p>
+        <p className="ability-pause-reason">{info.reason}</p>
         <p className="hint">
           {isHuman
-            ? '回响已生效。点「继续」让游戏推进。'
+            ? '能力已生效。点「继续」让游戏推进。'
             : 'AI 正在结算中…'}
         </p>
         {isHuman && (

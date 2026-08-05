@@ -480,8 +480,9 @@
   justify-content: center;
 }
 
-/* ────────── 模组扩展：激发回合 / 回响 / 状态徽章 ────────── */
+/* ────────── 模组扩展：通用能力/状态展示（基座模板） ────────── */
 
+/* 状态徽章：基座给 mod 提供的通用样式 */
 .state-badges {
   display: flex;
   flex-wrap: wrap;
@@ -497,201 +498,65 @@
   border: 1px solid rgba(196, 30, 58, 0.35);
 }
 
-.echo-list {
+/* 通用能力 chip：基座给 mod 提供的可点击样式（默认 disabled 态） */
+.ability-list {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   margin: 4px 0;
 }
-.echo-chip {
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 8px;
-  background: rgba(46, 139, 139, 0.18);
-  color: #2e8b8b;
-  border: 1px solid rgba(46, 139, 139, 0.35);
-}
-.echo-chip small {
-  opacity: 0.6;
-  margin-left: 2px;
-}
-
-.inspire-phase {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  align-items: center;
-  padding: 16px;
-  max-width: 720px;
-  margin: 0 auto;
-}
-.inspire-phase h2 {
-  color: var(--accent);
-  margin: 0;
-}
-.inspire-players {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-  width: 100%;
-}
-.inspire-player {
-  background: var(--code-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 10px;
-}
-.inspire-player.dead {
-  opacity: 0.45;
-}
-.inspire-player-name {
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-.inspire-echoes {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.inspire-echoes li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-
-.echo-panel {
-  position: relative;
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-}
-.echo-panel-body {
-  margin-top: 8px;
-  background: var(--code-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px;
-}
-.echo-feedback {
-  font-size: 12px;
-  color: var(--accent);
-  margin: 0 0 6px 0;
-}
-.echo-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.echo-group.muted {
-  opacity: 0.55;
-}
-.echo-group ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.echo-group li {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.echo-group button {
-  text-align: left;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 4px 8px;
-  cursor: pointer;
-  color: inherit;
-}
-.echo-group button:hover {
-  border-color: var(--accent);
-}
-.echo-disabled {
-  display: inline-block;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: var(--code-bg);
-  border: 1px dashed var(--border);
-}
-.echo-effect {
-  font-size: 11px;
-  opacity: 0.7;
-}
-
-/* 回响列表：直接可点击的 div.chip 布局 */
-.echo-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 4px;
-}
-.echo-chip {
+.ability-chip {
   display: inline-flex;
   flex-direction: column;
   gap: 2px;
-  padding: 6px 10px;
+  padding: 4px 8px;
+  font-size: 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--code-bg);
-  cursor: pointer;
-  user-select: none;
-  transition: all 0.1s ease;
-  min-width: 80px;
-  max-width: 220px;
 }
-.echo-chip strong {
-  font-size: 13px;
-}
-.echo-chip .echo-count {
-  color: var(--accent);
-  font-weight: 600;
-}
-.echo-chip .echo-effect {
-  font-size: 11px;
-  opacity: 0.7;
-  white-space: normal;
-}
-.echo-chip.disabled {
+.ability-chip.disabled {
   cursor: not-allowed;
   opacity: 0.6;
   border-style: dashed;
 }
 
-/* 「可用」回响高亮（亮起状态） */
-.echo-group:not(.muted) .echo-chip {
+/* 能力面板（基座模板）：可点击版本（亮起） */
+.ability-chip.available {
+  cursor: pointer;
+  user-select: none;
   border-color: var(--accent);
   background: rgba(196, 30, 58, 0.08);
   box-shadow: 0 0 0 1px rgba(196, 30, 58, 0.25) inset;
+  transition: all 0.1s ease;
 }
-.echo-group:not(.muted) .echo-chip:hover {
+.ability-chip.available:hover {
   background: rgba(196, 30, 58, 0.18);
   transform: translateY(-1px);
   box-shadow: 0 2px 6px rgba(196, 30, 58, 0.25);
 }
-.echo-group:not(.muted) .echo-chip:active {
+.ability-chip.available:active {
   transform: translateY(0);
 }
-.echo-group:not(.muted) .echo-chip::after {
-  content: " ·可点";
+.ability-count {
   color: var(--accent);
-  font-size: 10px;
+  font-weight: 600;
+}
+.ability-effect {
+  font-size: 11px;
   opacity: 0.7;
-  margin-left: 4px;
+  white-space: normal;
 }
 
-.echo-target-modal {
+/* 能力反馈（基座模板：AbilityPanel 内部用） */
+.ability-feedback {
+  font-size: 12px;
+  color: var(--accent);
+  margin: 0 0 6px 0;
+}
+
+/* 能力面板：模态框（基座模板） */
+.ability-target-modal {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
@@ -700,14 +565,14 @@
   justify-content: center;
   z-index: 1000;
 }
-.echo-target-card {
+.ability-target-card {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 16px;
   min-width: 240px;
 }
-.echo-target-card ul {
+.ability-target-card ul {
   list-style: none;
   padding: 0;
   margin: 0 0 8px 0;
@@ -716,8 +581,8 @@
   gap: 4px;
 }
 
-/* 使用回响后暂停遮罩 */
-.echo-pause-overlay {
+/* 使用能力后暂停遮罩（基座通用 API） */
+.ability-pause-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
@@ -725,13 +590,13 @@
   align-items: center;
   justify-content: center;
   z-index: 1100;
-  animation: echoPauseFade 0.18s ease-out;
+  animation: abilityPauseFade 0.18s ease-out;
 }
-@keyframes echoPauseFade {
+@keyframes abilityPauseFade {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
-.echo-pause-card {
+.ability-pause-card {
   background: var(--bg);
   border: 1px solid var(--accent);
   border-radius: 12px;
@@ -741,15 +606,15 @@
   text-align: center;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
 }
-.echo-pause-card h3 {
+.ability-pause-card h3 {
   margin: 0 0 6px 0;
   color: var(--accent);
 }
-.echo-pause-reason {
+.ability-pause-reason {
   font-size: 14px;
   margin: 6px 0 12px 0;
 }
-.echo-pause-card .hint {
+.ability-pause-card .hint {
   font-size: 12px;
   opacity: 0.75;
   margin: 0 0 12px 0;

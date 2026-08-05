@@ -1,7 +1,9 @@
-// 默认实现：状态 / 阶段 / 回响 注册表
+// 默认注册表：状态 / 阶段 / 能力
+// 注意：本文件不依赖任何 mod 业务概念（echo / state / phase 等具体语义），
+// 全部使用通用名 abilities / states / phases。
 import type {
-  EchoDefinition,
-  EchoRegistry,
+  AbilityDefinition,
+  AbilityRegistry,
   PhaseDefinition,
   PhaseRegistry,
   PlayerStateEffect,
@@ -40,18 +42,22 @@ export class DefaultPhaseRegistry implements PhaseRegistry {
   }
 }
 
-export class DefaultEchoRegistry implements EchoRegistry {
-  echoes: Record<string, EchoDefinition> = {};
+export class DefaultAbilityRegistry implements AbilityRegistry {
+  abilities: Record<string, AbilityDefinition> = {};
 
-  register(echo: EchoDefinition): void {
-    this.echoes[echo.id] = echo;
+  register(ability: AbilityDefinition): void {
+    this.abilities[ability.id] = ability;
   }
 
-  get(id: string): EchoDefinition | undefined {
-    return this.echoes[id];
+  get(id: string): AbilityDefinition | undefined {
+    return this.abilities[id];
   }
 
-  list(): EchoDefinition[] {
-    return Object.values(this.echoes);
+  list(): AbilityDefinition[] {
+    return Object.values(this.abilities);
   }
 }
+
+// 向后兼容别名
+/** @deprecated 使用 DefaultAbilityRegistry */
+export const DefaultEchoRegistry = DefaultAbilityRegistry;

@@ -1,9 +1,18 @@
+// AI 基础策略
+// 完全通用：基座不写任何 mod 业务概念。
+// AI 决定「用不用一个能力」时，按以下规则：
+//   1. trigger === 'when-die' 不主动用（死亡时自动触发）
+//   2. trigger === 'custom' 不主动用（由 mod 自管）
+//   3. 其余按 AbilityDefinition.meta?.aiWeight 数值（默认 5）排序打分
+//      mod 可在 data.abilities[i].meta.aiWeight 调整
+//   4. 命中概率 = weight / 120 上限 0.6
+//   5. 选目标：requiresTarget=true 时随机一个其它存活玩家
+//      否则 40% 概率选一个其它存活玩家，60% 不选
 import type { AIStrategy, AIContext } from './types';
 import type { RandomProvider } from '../engine/random';
 import { CardPhase } from '../models/types';
-import type { Card, GameState, Player } from '../models/types';
-import type { EchoDefinition } from '../mod/types';
-import { GamePhase } from '../../utils/constants';
+import type { Card, Player } from '../models/types';
+import type { AbilityDefinition } from '../mod/types';
 
 export class BaseStrategy implements AIStrategy {
   name = '基础策略';
@@ -54,7 +63,7 @@ export class BaseStrategy implements AIStrategy {
 
     const truth = state.truthPhase;
     const matchingCards = player.hand.filter(
-      (c) => c.phase === truth || c.phase === CardPhase.DAO
+      (c) => c.phase === truth || c.phase === CardPhase.DAO,
     );
 
     if (matchingCards.length >= 4) return true;
@@ -65,42 +74,34 @@ export class BaseStrategy implements AIStrategy {
   }
 
   /**
-   * AI 决定是否使用一个回响，以及选谁作为目标。
-   * 返回 null 表示本回合不用回响。
-   * 简单策略：按 echoId 加权（保命类优先），有一定概率使用。
+   * 决定是否使用一个能力（基座通用实现）。
+   * mod 可在 data.abilities[i].meta.aiWeight 调整各项权重。
    */
-  decideEcho(
+  decideAbility(
     context: AIContext,
-    echoDefs: EchoDefinition[],
-  ): { echoId: string; targetId?: string } | null {
+    abilityDefs: AbilityDefinition[],
+  ): { abilityId: string; targetId?: string } | null {
     const { player, state } = context;
-    const owned = ((player.modData?.echoes as Array<{ id: string; remaining: number }>) ?? [])
-      .filter((e) => e.remaining > 0);
+    // 基座只读 player.modData.abilities（mod 自己管剩余次数与数据形状）
+    const owned = ((player.modData?.abilities as Array<{ id: string; remaining: number }>) ?? [])
+      .filter((a) => a.remaining > 0);
     if (owned.length === 0) return null;
 
-    const defsById = new Map(echoDefs.map((d) => [d.id, d]));
-    const phase = state.phase;
+    const defsById = new Map(abilityDefs.map((d) => [d.id, d]));
 
-    // 找可用回响
+    // 找可用能力：filter 出 trigger 在当前 phase 下可用的
     const usable = owned
-      .map((e) => defsById.get(e.id))
-      .filter((d): d is EchoDefinition => Boolean(d && isTriggerOk(d.trigger, phase)));
+      .map((a) => defsById.get(a.id))
+      .filter((d): d is AbilityDefinition => Boolean(d && isTriggerAvailable(d.trigger, state.phase)));
     if (usable.length === 0) return null;
 
-    // 优先级：保命 > 干扰 > 增益
-    const weight = (id: string): number => {
-      if (['qiangyun', 'bumie', 'jiahuo', 'tizui', 'tianxingjian', 'shengshengbuxi', 'zhiyu'].includes(id)) return 90;
-      if (['zhaozai', 'zhiai', 'rumeng', 'shimang', 'powanfa'].includes(id)) return 70;
-      if (['wangyou', 'tannang', 'lingshi', 'duxin', 'lingxiu', 'fengzhang'].includes(id)) return 50;
-      if (['chiyan', 'lunhuibuzhi', 'huaxing', 'yinni'].includes(id)) return 30;
-      if (['jifa', 'xianling', 'dianren', 'yanpin', 'qiaowu', 'baoshan'].includes(id)) return 20;
-      if (['huoshui', 'lixi', 'hunqian', 'yueqian', 'duoxinpo', 'shuangshenghua'].includes(id)) return 10;
-      return 5;
+    // 排序：先按 meta.aiWeight 权重，再随机扰动
+    const weight = (d: AbilityDefinition): number => {
+      const w = (d.meta?.aiWeight as number | undefined);
+      return typeof w === 'number' ? w : 5;
     };
-
-    // 排序：先按权重，再随机扰动
     const sorted = usable
-      .map((d) => ({ d, w: weight(d.id) + this.random.next() * 20 }))
+      .map((d) => ({ d, w: weight(d) + this.random.next() * 20 }))
       .sort((a, b) => b.w - a.w);
 
     // 命中率与权重成正比，最高不超过 0.6
@@ -110,64 +111,27 @@ export class BaseStrategy implements AIStrategy {
 
     // 选目标
     const otherAlive = state.players.filter((p) => p.id !== player.id && !p.isDead);
-    const needsTarget = TARGET_HINTS[top.d.id] === 'target';
-    const selfOnly = SELF_ONLY.has(top.d.id);
     let target: Player | undefined;
-    if (needsTarget && otherAlive.length > 0) {
+    if (top.d.requiresTarget && otherAlive.length > 0) {
       target = otherAlive[Math.floor(this.random.next() * otherAlive.length)];
-    } else if (selfOnly) {
-      target = player;
     } else if (otherAlive.length > 0 && this.random.next() < 0.4) {
       target = otherAlive[Math.floor(this.random.next() * otherAlive.length)];
     }
 
-    return { echoId: top.d.id, targetId: target?.id };
+    return { abilityId: top.d.id, targetId: target?.id };
   }
 }
 
-/** 哪些 echo 需要明确选另一个玩家作为目标 */
-const TARGET_HINTS: Record<string, 'target' | 'self' | 'none'> = {
-  zhaozai: 'target',
-  zhiai: 'target',
-  shuangshenghua: 'target',
-  tannang: 'target',
-  huoshui: 'target',
-  yinni: 'target',
-  fengzhang: 'target',
-  wangyou: 'target',
-  rumeng: 'target',
-  powanfa: 'target',
-  huaxing: 'target',
-  qiaowu: 'target',
-  yanpin: 'target',
-  baoshan: 'none',
-  chiyan: 'self',
-  duxin: 'target',
-  duoxinpo: 'target',
-  lixi: 'target',
-  lingshi: 'target',
-  lingxiu: 'target',
-  yueqian: 'target',
-  hunqian: 'self',
-  zhiyu: 'target',
-  shengshengbuxi: 'target',
-  jifa: 'target',
-  lunhuibuzhi: 'none',
-  xianling: 'self',
-  jiahuo: 'self',
-  tizui: 'self',
-  qiangyun: 'self',
-  bumie: 'self',
-  dianren: 'target',
-};
-
-/** 仅对自己生效 */
-const SELF_ONLY = new Set(['chiyan', 'hunqian', 'xianling', 'jiahuo', 'tizui', 'qiangyun', 'bumie']);
-
-/** 与 EchoPanel 保持一致 */
-function isTriggerOk(trigger: EchoDefinition['trigger'], phase: GamePhase): boolean {
+/**
+ * 通用 trigger → 阶段匹配。mod 可在 AbilityDefinition.meta 自定义更复杂的判断。
+ */
+function isTriggerAvailable(
+  trigger: AbilityDefinition['trigger'],
+  phase: string,
+): boolean {
   if (trigger === 'when-die') return false;
   if (trigger === 'any') return true;
+  if (trigger === 'custom') return false;
   switch (trigger) {
     case 'play-phase':
     case 'open-phase':
@@ -175,10 +139,10 @@ function isTriggerOk(trigger: EchoDefinition['trigger'], phase: GamePhase): bool
     case 'big-round':
     case 'after-life-death':
     case 'before-draw':
-      return phase === GamePhase.PLAYING || phase === GamePhase.OPENING;
+      return phase === 'playing' || phase === 'opening';
     case 'life-death':
     case 'before-life-death':
-      return phase === GamePhase.LIFE_DEATH;
+      return phase === 'life_death';
     default:
       return false;
   }

@@ -1,4 +1,8 @@
 // 解析 .mod.md 文件：YAML frontmatter + 章节 + JSON 代码块
+//
+// ⚠️ 本解析器已**弃用**，仅保留用于过渡期兼容老 mod 源文件。
+// 新 mod 应当使用 JSON 压缩包格式（见 package.ts / package-loader.ts）。
+//
 // 一个 mod 文件的格式：
 //
 // ---
@@ -25,7 +29,7 @@
 // onGameStart(state) { ... }
 // ```
 import type {
-  EchoDefinition,
+  AbilityDefinition,
   GameMod,
   ModData,
   ModLoadResult,
@@ -229,13 +233,16 @@ export function parseModFile(raw: string, source: string = '<inline>'): ModLoadR
         let lastErr: string | undefined;
         for (const b of blocks) {
           try {
-            const obj = JSON.parse(b.code) as ModData;
+            const obj = JSON.parse(b.code) as Record<string, unknown>;
             anyOk = true;
-            if (obj.echoes) acc.echoes = (acc.echoes ?? []).concat(obj.echoes);
-            if (obj.states) acc.states = (acc.states ?? []).concat(obj.states);
-            if (obj.phases) acc.phases = (acc.phases ?? []).concat(obj.phases);
-            if (obj.cards) acc.cards = (acc.cards ?? []).concat(obj.cards);
-            if (obj.custom) acc.custom = { ...(acc.custom ?? {}), ...obj.custom };
+            // 兼容：旧字段 "echoes" 映射到新字段 "abilities"
+            const abilities = (obj.abilities as AbilityDefinition[] | undefined) ??
+              (obj.echoes as AbilityDefinition[] | undefined);
+            if (abilities) acc.abilities = (acc.abilities ?? []).concat(abilities);
+            if (obj.states) acc.states = (acc.states ?? []).concat(obj.states as PlayerStateEffect[]);
+            if (obj.phases) acc.phases = (acc.phases ?? []).concat(obj.phases as PhaseDefinition[]);
+            if (obj.cards) acc.cards = (acc.cards ?? []).concat(obj.cards as never[]);
+            if (obj.custom) acc.custom = { ...(acc.custom ?? {}), ...(obj.custom as Record<string, unknown>) };
           } catch (e) {
             lastErr = (e as Error).message;
           }
@@ -244,6 +251,13 @@ export function parseModFile(raw: string, source: string = '<inline>'): ModLoadR
           parsed = acc;
         } else {
           errors.push(`「数据」章节 JSON 解析失败：${lastErr ?? '未知错误'}`);
+        }
+      }
+      // 合并解析路径：把 echoes 同样归并到 abilities
+      if (parsed) {
+        const legacy = (parsed as ModData & { echoes?: AbilityDefinition[] }).echoes;
+        if (legacy && !parsed.abilities) {
+          parsed.abilities = legacy;
         }
       }
       data = parsed ?? undefined;
@@ -334,9 +348,11 @@ export function parseModFile(raw: string, source: string = '<inline>'): ModLoadR
 
   // 验证 data 内部 schema
   if (data) {
-    if (data.echoes) {
-      for (const e of data.echoes) {
-        validateEcho(e, errors);
+    // 兼容旧字段 echoes
+    const abilities = data.abilities ?? (data as ModData & { echoes?: AbilityDefinition[] }).echoes;
+    if (abilities) {
+      for (const a of abilities) {
+        validateAbility(a, errors);
       }
     }
     if (data.states) {
@@ -371,12 +387,11 @@ export function parseModFile(raw: string, source: string = '<inline>'): ModLoadR
   return { manifest: mf as ModManifest, raw, source, errors: [], mod };
 }
 
-function validateEcho(e: Partial<EchoDefinition>, errors: string[]): void {
-  if (!e.id) errors.push(`回响缺少 id`);
-  if (!e.name) errors.push(`回响 ${e.id ?? '(?)'} 缺少 name`);
-  if (!e.shortName) errors.push(`回响 ${e.id ?? '(?)'} 缺少 shortName`);
-  if (typeof e.maxUses !== 'number') errors.push(`回响 ${e.id ?? '(?)'} 缺少 maxUses`);
-  if (!e.trigger) errors.push(`回响 ${e.id ?? '(?)'} 缺少 trigger`);
+function validateAbility(e: Partial<AbilityDefinition>, errors: string[]): void {
+  if (!e.id) errors.push(`能力缺少 id`);
+  if (!e.name) errors.push(`能力 ${e.id ?? '(?)'} 缺少 name`);
+  if (typeof e.maxUses !== 'number') errors.push(`能力 ${e.id ?? '(?)'} 缺少 maxUses`);
+  if (!e.trigger) errors.push(`能力 ${e.id ?? '(?)'} 缺少 trigger`);
 }
 
 function validateState(s: Partial<PlayerStateEffect>, errors: string[]): void {

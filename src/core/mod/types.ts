@@ -1,5 +1,9 @@
 // 模组系统类型定义
-// 一个 mod 是一个单文件（推荐 .mod.md），由 mod-loader 解析并注册
+// 一个 mod 是一个压缩包（推荐 .mod），由 mod-loader 解析并注册。
+// 包内分为 manifest / info / data / script / assets 五段，详见 package.ts。
+//
+// 本文件**不**包含任何具体游戏机制（回响/技能/道具 等），
+// 只定义 mod 体系的「扩展点」与「数据契约」。具体能力由各 mod 自己定义。
 import type { Card, GameState, Player } from '../models/types';
 import type { RuleEngine } from '../engine/rule-engine';
 
@@ -12,7 +16,7 @@ export interface PlayerStateEffect {
   id: string;
   name: string;
   description: string;
-  /** 是否阻止状态被「忘忧」类回响清除 */
+  /** 是否阻止状态被「忘忧」类能力清除 */
   locked?: boolean;
   /** 持续多久（按大回合 / 玩家回合 / 出牌回合计算） */
   duration: 'forever' | { rounds: number; unit: 'big-round' | 'play-turn' };
@@ -22,17 +26,17 @@ export interface PlayerStateEffect {
   skipChallenge?: boolean;
   /** 携带状态时不能查看自己手牌 */
   blind?: boolean;
-  /** 携带状态时不能使用回响 */
-  muteEchoes?: boolean;
-  /** 携带状态时随机禁用 1 个回响 */
+  /** 携带状态时不能使用能力 */
+  muteAbilities?: boolean;
+  /** 携带状态时随机禁用 1 个能力 */
   dreamDisorient?: boolean;
-  /** 携带状态时出牌数被锁定（与使用本回响者上次出牌数相同） */
+  /** 携带状态时出牌数被锁定（与上次出牌数相同） */
   lockPlayCountToLast?: boolean;
   /** 携带状态时与另一玩家同生共死 */
   pairedWith?: string; // playerId
   /** 携带状态时把除天龙外的所有神兽变死亡 */
   allBeastsDead?: boolean;
-  /** 携带状态时死亡还能撑过 N 个大回合 */
+  /** 携带状态时死亡还能撑 N 个大回合 */
   lingerRounds?: number;
 }
 
@@ -41,6 +45,7 @@ export interface PlayerStateRegistry {
   effects: Record<string, PlayerStateEffect>;
   register(effect: PlayerStateEffect): void;
   get(id: string): PlayerStateEffect | undefined;
+  list(): PlayerStateEffect[];
 }
 
 // ────────────────────────────────────────────────────────────
@@ -69,62 +74,80 @@ export interface PhaseRegistry {
   phases: PhaseDefinition[];
   register(phase: PhaseDefinition): void;
   getInsertionPoint(point: PhaseDefinition['insertAt']): PhaseDefinition[];
+  list(): PhaseDefinition[];
 }
 
 // ────────────────────────────────────────────────────────────
-// 回响（mod 可以注册新回响）
+// 能力（mod 可以注册新能力，泛指玩家可消耗的技能/道具/法术等）
 // ────────────────────────────────────────────────────────────
 
-/** 回响使用时机 */
-export type EchoTrigger =
-  | 'play-phase'       // 出牌回合
-  | 'open-phase'       // 开牌回合
-  | 'small-round'      // 小回合内
-  | 'big-round'        // 大回合内
-  | 'life-death'       // 生死回合
-  | 'before-life-death'// 生死回合前
-  | 'after-life-death' // 上一生死回合后，本抽牌回合前
-  | 'before-draw'      // 抽牌回合抽牌前
-  | 'when-die'         // 有人死亡时
-  | 'any';             // 任意时机
+/**
+ * 能力使用时机。`any` 表示由 mod 自管理（不在通用 UI 面板里主动出现），
+ * `custom` 表示由 mod 在运行时通过 setAvailable()/lockAbility() 控制。
+ */
+export type AbilityTrigger =
+  | 'play-phase'        // 出牌回合
+  | 'open-phase'        // 开牌回合
+  | 'small-round'       // 小回合内
+  | 'big-round'         // 大回合内
+  | 'life-death'        // 生死回合
+  | 'before-life-death' // 生死回合前
+  | 'after-life-death'  // 上一生死回合后，本抽牌回合前
+  | 'before-draw'       // 抽牌回合抽牌前
+  | 'when-die'          // 有人死亡时（多用于被动触发）
+  | 'any'               // 任意时机
+  | 'custom';           // 由 mod 自行管理可用性
 
-/** 回响定义：参与者持有的可消耗技能 */
-export interface EchoDefinition {
+/**
+ * 能力定义：玩家持有的可消耗「招数」/「道具」/「技能」。
+ * 这是基座提供的**通用契约**，mod 可基于它实现任何体系
+ * （回响、卡牌技能、道具、灵咒等）。
+ */
+export interface AbilityDefinition {
   id: string;
   name: string;
-  /** 4 字以下名称用于「破万法」识别 */
-  shortName: string;
-  trigger: EchoTrigger;
+  /** 简短展示名（2~4 字），部分 mod 可能基于长度做识别 */
+  shortName?: string;
+  /** 触发时机，决定默认是否在通用面板里亮起 */
+  trigger: AbilityTrigger;
+  /** 最大使用次数 */
   maxUses: number;
-  /** 回响效果描述（自然语言） */
+  /** 自然语言描述（用于 tooltip / 日志） */
   effect: string;
-  /** 二回响标识：可被「显灵」复制 */
-  isShort?: boolean;
+  /** 是否需要玩家手动选目标（基座面板据此切到「选目标」模式） */
+  requiresTarget?: boolean;
+  /** 可选：模组自己的扩展字段，UI 不会读取 */
+  meta?: Record<string, unknown>;
 }
 
-/** 回响注册表 */
-export interface EchoRegistry {
-  echoes: Record<string, EchoDefinition>;
-  register(echo: EchoDefinition): void;
-  get(id: string): EchoDefinition | undefined;
-  list(): EchoDefinition[];
+/** 能力注册表 */
+export interface AbilityRegistry {
+  abilities: Record<string, AbilityDefinition>;
+  register(ability: AbilityDefinition): void;
+  get(id: string): AbilityDefinition | undefined;
+  list(): AbilityDefinition[];
 }
 
 // ────────────────────────────────────────────────────────────
 // Mod 数据：注册到游戏中的结构化数据
 // ────────────────────────────────────────────────────────────
 
-/** Mod 携带的所有数据 */
+/**
+ * Mod 携带的所有数据。
+ * 字段名都使用**通用名词**（abilities / states / phases / cards），
+ * 具体语义由 mod 自己解释——例如「abilities」在某 mod 中是回响，
+ * 在另一个 mod 中可以是卡牌技能或一次性道具。
+ */
 export interface ModData {
-  /** 回响字典 */
-  echoes?: EchoDefinition[];
+  /** 能力列表（mod 自解释：回响 / 技能 / 道具 / 法术 等） */
+  abilities?: AbilityDefinition[];
   /** 玩家状态效果 */
   states?: PlayerStateEffect[];
   /** 阶段定义 */
   phases?: PhaseDefinition[];
   /** 自定义卡牌 */
   cards?: Card[];
-  /** 任意扩展字段 */
+  /** 任意扩展字段（mod 自取） */
   custom?: Record<string, unknown>;
 }
 
@@ -136,8 +159,10 @@ export interface ModData {
 export interface ModContext {
   states: PlayerStateRegistry;
   phases: PhaseRegistry;
-  echoes: EchoRegistry;
+  abilities: AbilityRegistry;
   log(message: string, ...args: unknown[]): void;
+  /** mod 调用方提供的扩展点：mod 可往 modData 上写自己的状态 */
+  // （不需要在这里加；mod 自己往 player.modData 写即可）
 }
 
 /** mod 钩子：游戏生命周期事件 */
@@ -187,7 +212,7 @@ export interface ModHooks {
 // GameMod：模组的最终形态
 // ────────────────────────────────────────────────────────────
 
-/** mod 元数据（来自 frontmatter） */
+/** mod 元数据 */
 export interface ModManifest {
   id: string;
   name: string;
@@ -204,10 +229,9 @@ export interface ModManifest {
 
 /** 模组主接口：metadata + 钩子 + 数据 + 补丁 */
 export interface GameMod extends ModManifest, ModHooks {
-  // 数据
+  /** 数据 */
   data?: ModData;
-
-  // 旧版补丁接口（保持兼容）
+  /** 旧版补丁接口（保持兼容） */
   patchDeck?(base: Card[]): Card[];
   patchEngine?(engine: RuleEngine): RuleEngine;
 }
@@ -233,8 +257,8 @@ export interface ModLoader {
   // 供 UI 读取的注册表
   getStateRegistry(): PlayerStateRegistry;
   getPhaseRegistry(): PhaseRegistry;
-  getEchoRegistry(): EchoRegistry;
-  listEchoes(): EchoDefinition[];
+  getAbilityRegistry(): AbilityRegistry;
+  listAbilities(): AbilityDefinition[];
   listStates(): PlayerStateEffect[];
   listPhases(): PhaseDefinition[];
 
@@ -243,8 +267,23 @@ export interface ModLoader {
   applyRulePatches(engine: RuleEngine): RuleEngine;
   applyStatePatches(registry: PlayerStateRegistry): PlayerStateRegistry;
   applyPhasePatches(registry: PhaseRegistry): PhaseRegistry;
-  applyEchoPatches(registry: EchoRegistry): EchoRegistry;
+  applyAbilityPatches(registry: AbilityRegistry): AbilityRegistry;
 
   // 触发钩子
   triggerHook(hook: keyof ModHooks, ...args: unknown[]): void;
+  /** 由 RoundManager 在每次 hook 前调用，注入最新 state（可选） */
+  setCurrentState?(state: GameState | null): void;
 }
+
+// ────────────────────────────────────────────────────────────
+// 向后兼容别名
+// ────────────────────────────────────────────────────────────
+// 旧版 .mod.md 解析期使用的类型保留为别名，避免破坏外部引用。
+// 新代码请使用 AbilityDefinition / AbilityRegistry / AbilityTrigger。
+
+/** @deprecated 使用 AbilityTrigger */
+export type EchoTrigger = AbilityTrigger;
+/** @deprecated 使用 AbilityDefinition */
+export type EchoDefinition = AbilityDefinition;
+/** @deprecated 使用 AbilityRegistry */
+export type EchoRegistry = AbilityRegistry;

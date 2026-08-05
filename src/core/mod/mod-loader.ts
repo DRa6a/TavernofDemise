@@ -1,11 +1,16 @@
 // Mod 加载器：注册 mod，按 priority 排序，应用补丁，触发钩子
-import type { Card } from '../models/types';
+// 完全通用：不依赖任何具体 mod 业务概念（回响/技能/道具 等）。
+//
+// 加载流程：
+// 1. 包加载（package-loader）解析 JSON，拿到 ModPackage
+// 2. 创建 Default* 注册表，调用 mod 的 setup(api) 注入数据 / UI
+// 3. 把 mod 钩子挂到引擎（RoundManager 通过 triggerHook 调用）
+import type { Card, GameState, Player } from '../models/types';
 import type { RuleEngine } from '../engine/rule-engine';
 import type {
-  EchoDefinition,
-  EchoRegistry,
+  AbilityDefinition,
+  AbilityRegistry,
   GameMod,
-  ModContext,
   ModHooks,
   ModLoader,
   ModManifest,
@@ -15,18 +20,26 @@ import type {
   PlayerStateRegistry,
 } from './types';
 import {
-  DefaultEchoRegistry,
+  DefaultAbilityRegistry,
   DefaultPhaseRegistry,
   DefaultPlayerStateRegistry,
 } from './registry';
+import { loadModPackageFromString } from './package-loader';
 import { parseModFile } from './parser';
+import type { ModApi, ModScriptExports, PhaseController } from './api';
+import { registerSlot, unregisterSlot } from './ui-slots';
+import type { ModSlotId, SlotRenderFn } from './api';
 
 export class DefaultModLoader implements ModLoader {
   private mods: GameMod[] = [];
   private stateRegistry: PlayerStateRegistry = new DefaultPlayerStateRegistry();
   private phaseRegistry: PhaseRegistry = new DefaultPhaseRegistry();
-  private echoRegistry: EchoRegistry = new DefaultEchoRegistry();
+  private abilityRegistry: AbilityRegistry = new DefaultAbilityRegistry();
   private logger: (msg: string, ...args: unknown[]) => void;
+  /** 状态为 mod 提供 currentState（每个 hook 前由 RoundManager 注入） */
+  private currentState: GameState | null = null;
+  /** 每个 mod 注册的 UI 槽渲染函数，用于卸载时清理 */
+  private slotRegistrations: Array<{ id: ModSlotId; fn: SlotRenderFn; modId: string }> = [];
 
   constructor(logger?: (msg: string, ...args: unknown[]) => void) {
     this.logger = logger ?? ((msg, ...args) => console.log(`[mod] ${msg}`, ...args));
@@ -41,20 +54,31 @@ export class DefaultModLoader implements ModLoader {
     this.mods.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
     this.logger(`注册 mod: ${mod.id} v${mod.version}`);
 
-    // 注册该 mod 携带的数据
+    // 1) 把 data.* 注册到默认注册表
     if (mod.data?.states) {
       for (const s of mod.data.states) this.stateRegistry.register(s);
     }
     if (mod.data?.phases) {
       for (const p of mod.data.phases) this.phaseRegistry.register(p);
     }
-    if (mod.data?.echoes) {
-      for (const e of mod.data.echoes) this.echoRegistry.register(e);
+    if (mod.data?.abilities) {
+      for (const a of mod.data.abilities) this.abilityRegistry.register(a);
     }
 
-    // 立即触发 onRegister，让 mod 填充它的数据
+    // 2) 调 mod 的 setup(api)（如果存在），让 mod 通过 API 注入数据/UI
+    const exports = mod as ModScriptExports;
+    if (typeof exports.setup === 'function') {
+      const api = this.buildApi(mod.id);
+      try {
+        exports.setup(api);
+      } catch (e) {
+        this.logger(`mod ${mod.id} setup 报错：${(e as Error).message}`);
+      }
+    }
+
+    // 3) 立即触发 onRegister（兼容旧接口）
     if (mod.onRegister) {
-      const ctx = this.buildContext();
+      const ctx = this.buildApi(mod.id);
       try {
         mod.onRegister(ctx);
       } catch (e) {
@@ -68,7 +92,17 @@ export class DefaultModLoader implements ModLoader {
     if (idx < 0) return;
     const mod = this.mods[idx];
     this.mods.splice(idx, 1);
-    // 清理该 mod 注册的数据
+
+    // 清理 mod 注册的 UI 槽
+    for (let i = this.slotRegistrations.length - 1; i >= 0; i--) {
+      const r = this.slotRegistrations[i];
+      if (r.modId === modId) {
+        unregisterSlot(r.id, r.fn);
+        this.slotRegistrations.splice(i, 1);
+      }
+    }
+
+    // 清理 mod 注册的数据
     if (mod.data?.states) {
       for (const s of mod.data.states) delete this.stateRegistry.effects[s.id];
     }
@@ -77,9 +111,25 @@ export class DefaultModLoader implements ModLoader {
         (p) => !mod.data!.phases!.some((mp) => mp.id === p.id),
       );
     }
-    if (mod.data?.echoes) {
-      for (const e of mod.data.echoes) delete this.echoRegistry.echoes[e.id];
+    if (mod.data?.abilities) {
+      for (const a of mod.data.abilities) delete this.abilityRegistry.abilities[a.id];
     }
+
+    // 清理 mod 注册的卡牌
+    if (mod.data?.cards) {
+      // 卡牌合并是从 base + 各 mod.data.cards 累加，卸载时不撤销（简单处理）
+    }
+
+    // 调 mod 的 teardown
+    const exports = mod as ModScriptExports;
+    if (typeof exports.teardown === 'function') {
+      try {
+        exports.teardown();
+      } catch (e) {
+        this.logger(`mod ${modId} teardown 报错：${(e as Error).message}`);
+      }
+    }
+
     this.logger(`注销 mod: ${modId}`);
   }
 
@@ -103,13 +153,12 @@ export class DefaultModLoader implements ModLoader {
     return this.phaseRegistry;
   }
 
-  getEchoRegistry(): EchoRegistry {
-    return this.echoRegistry;
+  getAbilityRegistry(): AbilityRegistry {
+    return this.abilityRegistry;
   }
 
-  // 便捷 API：列出所有已注册的回响 / 状态 / 阶段
-  listEchoes(): EchoDefinition[] {
-    return this.echoRegistry.list();
+  listAbilities(): AbilityDefinition[] {
+    return this.abilityRegistry.list();
   }
 
   listStates(): PlayerStateEffect[] {
@@ -126,7 +175,6 @@ export class DefaultModLoader implements ModLoader {
 
   applyDeckPatches(base: Card[]): Card[] {
     return this.mods.reduce((deck, mod) => {
-      // 先应用 data.cards 增量
       let next = mod.data?.cards ? [...deck, ...mod.data.cards] : deck;
       if (mod.patchDeck) next = mod.patchDeck(next);
       return next;
@@ -157,10 +205,10 @@ export class DefaultModLoader implements ModLoader {
     return registry;
   }
 
-  applyEchoPatches(registry: EchoRegistry): EchoRegistry {
+  applyAbilityPatches(registry: AbilityRegistry): AbilityRegistry {
     for (const mod of this.mods) {
-      if (mod.data?.echoes) {
-        for (const e of mod.data.echoes) registry.register(e);
+      if (mod.data?.abilities) {
+        for (const a of mod.data.abilities) registry.register(a);
       }
     }
     return registry;
@@ -170,7 +218,14 @@ export class DefaultModLoader implements ModLoader {
   // 钩子触发
   // ────────────────────────────────────────────────────────────
 
+  /**
+   * 触发某个钩子。RoundManager 在每次调用前都会更新 currentState，
+   * 这样 mod 通过 api.state 拿到的就是「当前」state。
+   */
   triggerHook(hook: keyof ModHooks, ...args: unknown[]): void {
+    const state = this.currentState;
+    // 更新 mod 的 api.state（如果有 mod 在 setup 时把它存了起来）
+    this.updateModStates(state);
     for (const mod of this.mods) {
       const fn = mod[hook] as unknown;
       if (typeof fn === 'function') {
@@ -184,35 +239,170 @@ export class DefaultModLoader implements ModLoader {
     }
   }
 
+  /** 由 RoundManager 在每个 hook 前调用，注入最新 state */
+  setCurrentState(state: GameState | null): void {
+    this.currentState = state;
+    this.updateModStates(state);
+  }
+
+  private updateModStates(state: GameState | null): void {
+    if (state === null) return;
+    // 让 mod 通过 api.state 拿到的总是当前 state
+    for (const mod of this.mods) {
+      const api = (mod as unknown as { __api?: ModApi }).__api;
+      if (api) api.state = state;
+    }
+  }
+
   // ────────────────────────────────────────────────────────────
-  // 内部工具
+  // 内部：构造 ModApi
   // ────────────────────────────────────────────────────────────
 
-  private buildContext(): ModContext {
-    return {
-      states: new DefaultPlayerStateRegistry(),
-      phases: new DefaultPhaseRegistry(),
-      echoes: new DefaultEchoRegistry(),
-      log: (msg, ...args) => this.logger(msg, ...args),
+  private buildApi(modId: string): ModApi {
+    const modId_ = modId;
+    const modLogger = (msg: string, ...args: unknown[]) => this.logger(`[${modId_}] ${msg}`, ...args);
+
+    // PhaseController 转发到 game store（通过全局 getter 拿 store）
+    const phaseCtrl: PhaseController = {
+      isActive: (phaseId: string) => {
+        // 在没有 React 上下文时（如 RoundManager 中）通过全局 store getter
+        const g = (globalThis as unknown as { __tavernStore?: { getState: () => { gameState: GameState | null } } })
+          .__tavernStore;
+        const state = g?.getState().gameState;
+        if (!state) return false;
+        return (state.modData as { customPhase?: string } | undefined)?.customPhase === phaseId;
+      },
+      complete: () => {
+        const g = (globalThis as unknown as {
+          __tavernStore?: { getState: () => { resumeAfterAbility?: () => void } };
+        }).__tavernStore;
+        g?.getState().resumeAfterAbility?.();
+      },
+      reroll: (playerId, abilityId) => {
+        const g = (globalThis as unknown as {
+          __tavernStore?: { getState: () => { rerollAbility?: (p: string, a: string) => boolean } };
+        }).__tavernStore;
+        return g?.getState().rerollAbility?.(playerId, abilityId) ?? false;
+      },
+      useAbility: (playerId, abilityId, targetId) => {
+        const g = (globalThis as unknown as {
+          __tavernStore?: {
+            getState: () => { useAbility?: (p: string, a: string, t?: string) => { ok: boolean; reason?: string } };
+          };
+        }).__tavernStore;
+        return (
+          g?.getState().useAbility?.(playerId, abilityId, targetId) ?? {
+            ok: false,
+            reason: 'no_store',
+          }
+        );
+      },
     };
+
+    const api: ModApi = {
+      log: modLogger,
+      abilities: this.abilityRegistry,
+      states: this.stateRegistry,
+      phases: this.phaseRegistry,
+      registerCards: (cards: Card[]) => {
+        // 记录 mod 注入的卡牌（与 data.cards 合并）
+        const mod = this.getById(modId_);
+        if (mod) {
+          mod.data = { ...(mod.data ?? {}), cards: [...(mod.data?.cards ?? []), ...cards] };
+        }
+      },
+      player: {
+        addState: (player: Player, stateId: string, rounds = 1) => {
+          if (!player.stateEffectIds?.includes(stateId)) {
+            player.stateEffectIds = [...(player.stateEffectIds ?? []), stateId];
+          }
+          if (!player.modData) player.modData = {};
+          const dur = (player.modData as Record<string, unknown>).stateDurations as
+            | Record<string, number>
+            | undefined;
+          (player.modData as Record<string, unknown>).stateDurations = {
+            ...(dur ?? {}),
+            [stateId]: rounds,
+          };
+        },
+        clearState: (player: Player, stateId: string) => {
+          player.stateEffectIds = (player.stateEffectIds ?? []).filter((s) => s !== stateId);
+          if (player.modData) {
+            const md = player.modData as Record<string, unknown>;
+            const dur = md.stateDurations as Record<string, number> | undefined;
+            if (dur) {
+              delete dur[stateId];
+            }
+          }
+        },
+        hasState: (player: Player, stateId: string) => {
+          return (player.stateEffectIds ?? []).includes(stateId);
+        },
+        getModData: <T = unknown>(player: Player, key: string): T | undefined => {
+          const data = (player.modData ?? {}) as Record<string, unknown>;
+          return data[key] as T | undefined;
+        },
+        setModData: (player: Player, key: string, value: unknown) => {
+          if (!player.modData) player.modData = {};
+          (player.modData as Record<string, unknown>)[key] = value;
+        },
+      },
+      ui: {
+        register: (id: ModSlotId, fn: SlotRenderFn) => {
+          registerSlot(id, fn);
+          this.slotRegistrations.push({ id, fn, modId: modId_ });
+        },
+        unregister: (id: ModSlotId, fn: SlotRenderFn) => {
+          unregisterSlot(id, fn);
+          this.slotRegistrations = this.slotRegistrations.filter(
+            (r) => !(r.id === id && r.fn === fn && r.modId === modId_),
+          );
+        },
+      },
+      phase: phaseCtrl,
+      state: this.currentState,
+    };
+
+    // 把 api 挂到 mod 上，方便 updateModStates 找到
+    (this.getById(modId_) as unknown as { __api?: ModApi }).__api = api;
+    return api;
   }
 }
 
 // ────────────────────────────────────────────────────────────
-// 工具：从原始内容加载（解析后注册）
+// 工具
 // ────────────────────────────────────────────────────────────
 
+/**
+ * 一行加载：从字符串（.mod JSON 文件 或 .mod.md 文件）解析并注册。
+ * 推荐用法——所有 mod 都应走这条路径。
+ *
+ * 自动识别：
+ * - 内容以 `---` 开头 → 旧版 .mod.md 解析器
+ * - 否则按 .mod JSON 包处理
+ */
 export function loadModFromString(
   loader: ModLoader,
   raw: string,
-  source: string = '<inline>',
+  _source: string = '<inline>',
 ): { ok: boolean; errors: string[]; mod?: GameMod } {
-  const result = parseModFile(raw, source);
-  if (result.errors.length > 0 || !result.mod) {
-    return { ok: false, errors: result.errors, mod: undefined };
+  const trimmed = raw.trimStart();
+  if (trimmed.startsWith('---')) {
+    // 旧版 .mod.md：通过 parseModFile 解析
+    const result = parseModFile(raw, _source);
+    if (result.errors.length > 0 || !result.mod) {
+      return { ok: false, errors: result.errors, mod: undefined };
+    }
+    loader.register(result.mod);
+    return { ok: true, errors: [], mod: result.mod };
   }
-  loader.register(result.mod);
-  return { ok: true, errors: [], mod: result.mod };
+  // 新版 .mod JSON
+  const res = loadModPackageFromString(raw);
+  if (!res.ok) {
+    return { ok: false, errors: res.errors, mod: undefined };
+  }
+  loader.register(res.mod);
+  return { ok: true, errors: [], mod: res.mod };
 }
 
 export type { ModManifest };

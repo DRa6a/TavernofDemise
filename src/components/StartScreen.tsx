@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import type { PlayerConfig } from '../core/models/types';
 import { HUMAN_ID, useGameStore } from '../store/game-store';
+import { ModSlot } from '../core/mod/ui-slots';
 
 interface StartScreenProps {
   onStart: (configs: PlayerConfig[]) => void;
@@ -12,7 +13,6 @@ export function StartScreen({ onStart }: StartScreenProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadedMods = useGameStore((s) => s.loadedMods);
-  const loadModFromUrl = useGameStore((s) => s.loadModFromUrl);
   const loadModFromString = useGameStore((s) => s.loadModFromString);
   const unloadMod = useGameStore((s) => s.unloadMod);
   const unloadAllMods = useGameStore((s) => s.unloadAllMods);
@@ -22,16 +22,6 @@ export function StartScreen({ onStart }: StartScreenProps) {
     name: i === 0 ? '玩家' : `AI ${i}`,
     isHuman: i === 0,
   }));
-
-  async function loadBundled() {
-    setModStatus('正在加载「异卷·回响」…');
-    const entry = await loadModFromUrl('/mods/回响.md', 'docs/回响.md');
-    if (entry && entry.errors.length === 0) {
-      setModStatus(`✓ 已加载：${entry.name} v${entry.version}`);
-    } else {
-      setModStatus(`✗ 加载失败：${entry?.errors.join('；') ?? '未知错误'}`);
-    }
-  }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -58,18 +48,21 @@ export function StartScreen({ onStart }: StartScreenProps) {
 
       <section className="mod-panel">
         <h2>异卷（模组）</h2>
-        <p className="hint">加载模组可向游戏中注入新回响、状态、机制。当前随包附带 <code>异卷·回响</code>。</p>
+        <p className="hint">
+          加载模组可向游戏中注入新能力、状态、机制。模组由 mod 作者维护，基座不预装任何模组。
+          请查阅 <code>docs/MODDING.md</code> 了解 API 与插槽。
+        </p>
+
+        {/* 模组自身可通过 start-screen:actions 槽注入额外的「加载按钮」 */}
         <div className="mod-buttons">
-          <button type="button" onClick={loadBundled} className="btn-secondary">
-            加载「异卷·回响」
-          </button>
+          <ModSlot slot="start-screen:actions" />
           <button type="button" onClick={() => fileInputRef.current?.click()} className="btn-secondary">
-            从本地 .mod.md 加载…
+            从本地 .mod 加载…
           </button>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".md,text/markdown,text/plain"
+            accept=".mod,.json,.md,text/markdown,text/plain,application/json"
             onChange={handleFileChange}
             style={{ display: 'none' }}
           />
@@ -102,6 +95,7 @@ export function StartScreen({ onStart }: StartScreenProps) {
                     </button>
                   </span>
                 )}
+                <ModSlot slot="start-screen:mod-list" />
               </li>
             ))}
           </ul>
@@ -112,11 +106,11 @@ export function StartScreen({ onStart }: StartScreenProps) {
         <label>
           玩家人数：
           <select value={playerCount} onChange={(e) => setPlayerCount(Number(e.target.value))}>
-            <option value={2}>2</option>
-            <option value={3}>3</option>
-            <option value={4}>4</option>
-            <option value={5}>5</option>
-            <option value={6}>6</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
           </select>
         </label>
         <button type="button" className="btn-primary" onClick={() => onStart(configs)}>
