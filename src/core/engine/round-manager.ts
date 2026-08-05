@@ -104,6 +104,7 @@ export class RoundManager {
     };
 
     this.emit({ type: 'GAME_STARTED', players });
+    this.hook('onBeforeGameStart', this.state);
     this.hook('onGameStart', this.state);
     this.electFirstPlayer();
   }
@@ -112,6 +113,8 @@ export class RoundManager {
     if (this.state.players.length === 0) {
       throw new Error('尚未开始游戏');
     }
+
+    this.hook('onBeforeElection', this.state);
 
     const firstIndex = Math.floor(this.random.next() * this.state.players.length);
     const firstPlayer = this.state.players[firstIndex];
@@ -125,6 +128,7 @@ export class RoundManager {
   startRound(): void {
     this.state.currentRound += 1;
     this.state.currentSubRound = undefined;
+    this.hook('onBigRoundStart', this.state, this.state.currentRound);
     if (this.state.lastPlay) {
       this.state.discardPile.push(...this.state.lastPlay.cards);
       this.state.lastPlay = undefined;
@@ -154,6 +158,7 @@ export class RoundManager {
     }
 
     this.emit({ type: 'ROUND_STARTED', round: this.state.currentRound });
+    this.hook('onBeforeDraw', this.state);
 
     for (const player of alivePlayers) {
       const { drawn, remaining } = new Shuffler(this.random).draw(this.state.deck, HAND_SIZE);
@@ -161,6 +166,7 @@ export class RoundManager {
       this.state.deck = remaining;
       this.emit({ type: 'CARDS_DRAWN', playerId: player.id, count: drawn.length });
     }
+    this.hook('onAfterDraw', this.state);
 
     this.declareTruthPhase();
   }
@@ -195,6 +201,8 @@ export class RoundManager {
       throw new Error('出牌包含不在手牌中的卡牌');
     }
 
+    this.hook('onBeforePlay', this.state, player, cardIds);
+
     const cards: Card[] = [];
     for (const cardId of cardIds) {
       const index = player.hand.findIndex((c) => c.id === cardId);
@@ -226,6 +234,7 @@ export class RoundManager {
 
     const alivePlayers = this.state.players.filter((p) => !p.isDead);
     if (alivePlayers.length > 0 && alivePlayers.every((p) => p.isOutOfRound)) {
+      this.hook('onBigRoundEnd', this.state, this.state.currentRound);
       this.state.discardPile.push(...this.state.lastPlay!.cards);
       this.state.lastPlay = undefined;
       this.startRound();
@@ -245,6 +254,7 @@ export class RoundManager {
     if (!challenger) throw new Error('当前玩家不存在');
 
     this.emit({ type: 'CHALLENGE_DECISION', playerId: challenger.id, decision });
+    this.hook('onBeforeOpen', this.state);
 
     if (decision === 'challenge') {
       const result = this.ruleEngine.resolveChallenge(this.state);
@@ -286,6 +296,8 @@ export class RoundManager {
       loser.availableBeasts = [DivineBeastEnum.TIAN_LONG];
     }
 
+    this.hook('onBeforeLifeDeath', this.state, loser);
+
     const finalFace = face ?? loser.availableBeasts[Math.floor(this.random.next() * loser.availableBeasts.length)];
 
     this.emit({ type: 'DICE_ROLLED', playerId: loserId, face: finalFace });
@@ -321,6 +333,7 @@ export class RoundManager {
     }
 
     this.state.phase = GamePhase.DRAWING;
+    this.hook('onBigRoundEnd', this.state, this.state.currentRound);
     this.startRound();
   }
 

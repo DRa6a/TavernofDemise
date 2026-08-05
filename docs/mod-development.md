@@ -214,7 +214,7 @@ interface Card {
 
 ## 4. 钩子（hooks）
 
-在 `.mod.md` 文件中放置 ` ```ts` 代码块，**导出**（即赋给 `exports`）以下函数即可：
+在 `.mod.md` 文件中放置 ` ```ts` 代码块，**顶层声明**以下函数即可（解析器会扫描所有 `function name(...)` 与 `var name = ...`，把闭包内的标识符同步到 `exports`）：
 
 ```ts
 onRegister(ctx)                    // mod 注册到加载器时
@@ -235,34 +235,56 @@ onBigRoundStart(state, round)
 onBigRoundEnd(state, round)
 ```
 
-**写法**：
+**支持 3 种写法**：
 
-```ts
-// 在 ```ts 代码块里直接写赋值给同名变量即可
-onAfterOpen(state, isFake) {
-  // 例：跳过本大回合（规则 §4.2）
-  if (state.activePlayerId === state.lastPlay?.playerId) {
-    // 用 ctx.modData 之类的扩展位记一个标记
-    state.players.forEach(p => { (p.modData ??= {}).skipBigRound = true; });
-  }
-}
-```
+1. TypeScript 方法简写（推荐，可读性最好）：
+   ```ts
+   onAfterOpen(state, isFake) {
+     // ...
+   }
+   ```
+2. 标准 `function` 声明：
+   ```ts
+   function onAfterOpen(state, isFake) {
+     // ...
+   }
+   ```
+3. 显式 `exports.X = ...`：
+   ```ts
+   exports.onAfterOpen = function (state, isFake) {
+     // ...
+   };
+   ```
 
-> 实现原理：解析器把所有 `ts` 代码块合并后用 `new Function('exports', …)` 求值，函数挂到 `exports` 上，**没有真正的导入能力**。如需复杂逻辑，可以借助 `ctx.log` 与 `modData` 字段做最小化协作。
+> 实现原理：解析器把所有 `ts` 代码块合并，先把方法简写 `name(args) {` 替换为 `function name(args) {`，再用正则扫描出所有顶层 `function name(...)` 和 `var name = ...` 标识符，最后在 `new Function` 体内追加 `exports[k] = k` 把它们拷出来。
 
 ### 4.1 钩子触发顺序
 
-`RoundManager` 会在以下时机触发钩子（按 `priority` **降序**遍历所有 mod）：
+`RoundManager` 在以下时机触发钩子（按 `priority` **降序**遍历所有 mod）：
 
 | 钩子 | 时机 |
 |:---|:---|
-| `onGameStart` | `startGame` 玩家初始化完毕、选举首位玩家前 |
-| `onAfterPlay` | `playCards` 出牌记录到 `lastPlay` 后 |
-| `onAfterOpen` | `openPhase` 揭晓真假后 |
-| `onPlayerDied` | `resolveLifeDeath` 判定到死亡时 |
-| `onAfterLifeDeath` | `resolveLifeDeath` 完成判定后 |
+| `onBeforeGameStart` | `startGame` 玩家初始化完毕、选举首位玩家前 |
+| `onGameStart` | 同上之后 |
+| `onBeforeElection` | 选举首位玩家前 |
+| `onBigRoundStart` | 每个大回合开始 |
+| `onBeforeDraw` | 抽牌前 |
+| `onAfterDraw` | 抽牌后 |
+| `onBeforePlay` | 出牌前 |
+| `onAfterPlay` | 出牌后 |
+| `onBeforeOpen` | 开牌前 |
+| `onAfterOpen` | 开牌后 |
+| `onBeforeLifeDeath` | 生死判定前 |
+| `onAfterLifeDeath` | 生死判定后 |
+| `onPlayerDied` | 玩家死亡时 |
+| `onPlayerRevived` | 玩家复活时（需用户自行在 `onAfterLifeDeath` 中触发） |
+| `onBigRoundEnd` | 每个大回合结束（开始下一轮前） |
 
-其他钩子（`onBeforeGameStart` / `onBeforeElection` / `onBeforeDraw` / `onAfterDraw` / `onBeforePlay` / `onBeforeOpen` / `onBeforeLifeDeath` / `onPlayerRevived` / `onBigRoundStart` / `onBigRoundEnd`）**接口已就绪**，但当前 `RoundManager` 尚未在对应节点调用；可在后续 PR 中补齐。
+### 4.2 暴露辅助 API
+
+> 任何 **顶层声明**（不以上述钩子名命名）都会作为**辅助函数**挂到 `mod` 对象上，UI 代码可以 `mod.castXxx(...)` 调用。
+>
+> 例如 `docs/回响.md` 暴露了 `useEcho` / `grantEchoes` / `castZhaozai` / `castZhiai` / `castBaoshan` / `castRumeng` / `castWangyou` / `castTianxingjian` 等。
 
 ---
 

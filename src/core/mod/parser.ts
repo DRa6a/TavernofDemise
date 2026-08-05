@@ -210,23 +210,49 @@ export function parseModFile(raw: string, source: string = '<inline>'): ModLoadR
   // 当前解析器不消费它们，但保留章节以方便作者按规范书写。
 
   // 从 data 章节解析 JSON
+  // 支持：1) 单个 json 块包含完整 ModData；2) 多个 json 块各自为 phases / states / echoes 等子集
   let data: ModData | undefined;
   if (dataSection) {
     const blocks = extractCodeBlocks(dataSection, 'json');
     if (blocks.length === 0) {
       errors.push('「数据」章节未发现 ```json 代码块');
     } else {
-      // 取第一个 JSON 块（合并多块以支持嵌套结构）
+      // 先尝试合并解析（最常见的写法）
       const merged = blocks.map((b) => b.code).join('\n');
+      let parsed: ModData | null = null;
       try {
-        data = JSON.parse(merged) as ModData;
-      } catch (e) {
-        errors.push(`「数据」章节 JSON 解析失败：${(e as Error).message}`);
+        parsed = JSON.parse(merged) as ModData;
+      } catch {
+        // 合并失败则尝试逐块解析并合并字段
+        const acc: ModData = {};
+        let anyOk = false;
+        let lastErr: string | undefined;
+        for (const b of blocks) {
+          try {
+            const obj = JSON.parse(b.code) as ModData;
+            anyOk = true;
+            if (obj.echoes) acc.echoes = (acc.echoes ?? []).concat(obj.echoes);
+            if (obj.states) acc.states = (acc.states ?? []).concat(obj.states);
+            if (obj.phases) acc.phases = (acc.phases ?? []).concat(obj.phases);
+            if (obj.cards) acc.cards = (acc.cards ?? []).concat(obj.cards);
+            if (obj.custom) acc.custom = { ...(acc.custom ?? {}), ...obj.custom };
+          } catch (e) {
+            lastErr = (e as Error).message;
+          }
+        }
+        if (anyOk) {
+          parsed = acc;
+        } else {
+          errors.push(`「数据」章节 JSON 解析失败：${lastErr ?? '未知错误'}`);
+        }
       }
+      data = parsed ?? undefined;
     }
   }
 
   // 从 TypeScript 代码块提取钩子（可选）
+  // 支持 TypeScript 方法简写（`onFoo(state) { ... }`）与显式赋值
+  // (`exports.onFoo = function(state) { ... }`)，通过预转换保证可被 `new Function` 求值
   const tsBlocks = extractCodeBlocks(body, 'ts');
   const tsContext: {
     onBeforeGameStart?: (state: unknown) => void;
@@ -244,29 +270,53 @@ export function parseModFile(raw: string, source: string = '<inline>'): ModLoadR
     onPlayerRevived?: (state: unknown, p: unknown) => void;
     onBigRoundStart?: (state: unknown, round: number) => void;
     onBigRoundEnd?: (state: unknown, round: number) => void;
+    [k: string]: unknown;
   } = {};
 
   if (tsBlocks.length > 0 && typeof Function === 'function') {
     try {
-      // 将所有 ts 代码块合并到一个 sandbox 中执行，把钩子挂到 `exports`
+      // 将所有 ts 代码块合并到一个 sandbox 中执行
       const code = tsBlocks.map((b) => b.code).join('\n\n');
-      // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
-      const factory = new Function('exports', 'state', 'player', 'cards', code + `
-        ;Object.keys(exports).forEach(k => { if (typeof exports[k] === 'function') {} });
-      `);
-      const exports: Record<string, unknown> = {};
-      factory(exports, undefined, undefined, undefined);
-      // 简单赋值（不做深度类型校验）
+      // 预转换：把 TypeScript 方法简写 `name(args) { body }` 转为 `function name(args) { body }`
       const knownHooks = [
         'onBeforeGameStart', 'onGameStart', 'onBeforeElection', 'onBeforeDraw', 'onAfterDraw',
         'onBeforePlay', 'onAfterPlay', 'onBeforeOpen', 'onAfterOpen',
         'onBeforeLifeDeath', 'onAfterLifeDeath', 'onPlayerDied', 'onPlayerRevived',
         'onBigRoundStart', 'onBigRoundEnd',
       ];
+      const transformed = code.replace(
+        new RegExp(`(^|\\n)\\s*(${knownHooks.join('|')})\\s*\\(([^)]*)\\)\\s*\\{`, 'g'),
+        (_m, prefix, name, args) => `${prefix}function ${name}(${args}) {`,
+      );
+      // 抓取所有顶层 `function name(...)` 和 `var name = ...` 的标识符
+      const names = new Set<string>();
+      const fnDeclRe = /(?:^|\n)\s*function\s+([A-Za-z_$][\w$]*)\s*\(/g;
+      let m: RegExpExecArray | null;
+      while ((m = fnDeclRe.exec(transformed)) !== null) {
+        names.add(m[1]);
+      }
+      const varDeclRe = /(?:^|\n)\s*var\s+([A-Za-z_$][\w$]*)\s*=/g;
+      while ((m = varDeclRe.exec(transformed)) !== null) {
+        names.add(m[1]);
+      }
+      // 在末尾把所有顶层声明拷到 exports
+      const tail = Array.from(names)
+        .map((k) => `try { exports[${JSON.stringify(k)}] = ${k}; } catch (_) {}`)
+        .join('\n');
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
+      const factory = new Function('exports', 'state', 'player', 'cards', transformed + '\n' + tail);
+      const exports: Record<string, unknown> = {};
+      factory(exports, undefined, undefined, undefined);
+      const knownSet = new Set(knownHooks);
       for (const k of knownHooks) {
         if (typeof exports[k] === 'function') {
           (tsContext as Record<string, unknown>)[k] = exports[k];
         }
+      }
+      // 同时把其它导出（如辅助 API、工具函数）也带回 mod 对象
+      for (const [k, v] of Object.entries(exports)) {
+        if (knownSet.has(k)) continue;
+        (tsContext as Record<string, unknown>)[k] = v;
       }
     } catch (e) {
       errors.push(`TS 钩子代码块解析失败：${(e as Error).message}`);
