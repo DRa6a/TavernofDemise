@@ -14,16 +14,39 @@ import { DeckBuilder } from './deck-builder';
 import type { RandomProvider } from './random';
 import { RuleEngine } from './rule-engine';
 import { Shuffler } from './shuffler';
+import type { ModLoader, ModHooks } from '../mod/types';
+
+export interface RoundManagerOptions {
+  random: RandomProvider;
+  initialState?: GameState;
+  /** 模组加载器：用于在生命周期触发 mod 钩子 */
+  modLoader?: ModLoader | null;
+}
 
 export class RoundManager {
   private state: GameState;
   private ruleEngine: RuleEngine;
   private random: RandomProvider;
+  private modLoader: ModLoader | null = null;
 
-  constructor(random: RandomProvider, initialState?: GameState) {
-    this.random = random;
-    this.ruleEngine = new RuleEngine();
-    this.state = initialState ?? this.createInitialState();
+  constructor(random: RandomProvider, initialState?: GameState);
+  constructor(options: RoundManagerOptions);
+  constructor(arg: RandomProvider | RoundManagerOptions, initialState?: GameState) {
+    if (typeof arg === 'function' || (arg && typeof (arg as RandomProvider).next === 'function' && typeof (arg as RandomProvider).shuffle === 'function')) {
+      this.random = arg as RandomProvider;
+      this.ruleEngine = new RuleEngine();
+      this.state = initialState ?? this.createInitialState();
+    } else {
+      const opts = arg as RoundManagerOptions;
+      this.random = opts.random;
+      this.modLoader = opts.modLoader ?? null;
+      this.ruleEngine = new RuleEngine();
+      this.state = opts.initialState ?? this.createInitialState();
+    }
+  }
+
+  setModLoader(loader: ModLoader | null): void {
+    this.modLoader = loader;
   }
 
   getState(): GameState {
@@ -48,6 +71,10 @@ export class RoundManager {
     this.state.history.push(event);
   }
 
+  private hook(hook: keyof ModHooks, ...args: unknown[]): void {
+    if (this.modLoader) this.modLoader.triggerHook(hook, ...args);
+  }
+
   startGame(configs: PlayerConfig[]): void {
     if (configs.length < MIN_PLAYERS || configs.length > MAX_PLAYERS) {
       throw new Error(`玩家数量必须在 ${MIN_PLAYERS}~${MAX_PLAYERS} 之间`);
@@ -65,6 +92,8 @@ export class RoundManager {
       position: index,
       availableBeasts: [...allFaces],
       rolledFaces: [],
+      stateEffectIds: [],
+      modData: {},
     }));
 
     this.state = {
@@ -75,6 +104,7 @@ export class RoundManager {
     };
 
     this.emit({ type: 'GAME_STARTED', players });
+    this.hook('onGameStart', this.state);
     this.electFirstPlayer();
   }
 
@@ -184,6 +214,7 @@ export class RoundManager {
     };
 
     this.emit({ type: 'CARDS_PLAYED', playerId, cards, declaredCount: cards.length });
+    this.hook('onAfterPlay', this.state, player, cards);
 
     if (player.hand.length === 0) {
       const aliveCount = this.state.players.filter((p) => !p.isDead).length;
@@ -225,6 +256,7 @@ export class RoundManager {
           cards: this.state.lastPlay.cards,
           isFake: result.isFake,
         });
+        this.hook('onAfterOpen', this.state, result.isFake);
       }
 
       this.state.phase = GamePhase.LIFE_DEATH;
@@ -268,7 +300,10 @@ export class RoundManager {
     if (result.isDead) {
       loser.isDead = true;
       this.emit({ type: 'PLAYER_DIED', playerId: loserId });
+      this.hook('onPlayerDied', this.state, loser);
     }
+
+    this.hook('onAfterLifeDeath', this.state, loser, !result.isDead);
 
     const alivePlayers = this.state.players.filter((p) => !p.isDead);
 

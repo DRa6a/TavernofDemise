@@ -21,6 +21,10 @@ export interface Player {
   position: number;
   availableBeasts: DivineBeast[];
   rolledFaces: DivineBeast[];
+  /** 玩家身上叠加的状态效果 id 列表（mod 扩展用） */
+  stateEffectIds?: string[];
+  /** 模组为该玩家注入的自定义数据 */
+  modData?: Record<string, unknown>;
 }
 
 export interface PlayerConfig {
