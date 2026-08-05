@@ -655,6 +655,60 @@
   gap: 4px;
 }
 
+/* 「可用」回响高亮（带 trigger 标识） */
+.echo-group:not(.muted) button {
+  border-color: var(--accent);
+  background: rgba(196, 30, 58, 0.08);
+}
+.echo-group:not(.muted) button:hover {
+  background: rgba(196, 30, 58, 0.18);
+}
+.echo-group:not(.muted) button::after {
+  content: " ·可点";
+  color: var(--accent);
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+/* 使用回响后暂停遮罩 */
+.echo-pause-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  animation: echoPauseFade 0.18s ease-out;
+}
+@keyframes echoPauseFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.echo-pause-card {
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 20px 24px;
+  min-width: 280px;
+  max-width: 360px;
+  text-align: center;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+.echo-pause-card h3 {
+  margin: 0 0 6px 0;
+  color: var(--accent);
+}
+.echo-pause-reason {
+  font-size: 14px;
+  margin: 6px 0 12px 0;
+}
+.echo-pause-card .hint {
+  font-size: 12px;
+  opacity: 0.75;
+  margin: 0 0 12px 0;
+}
+
 /* 对局记录 */
 .game-log {
   display: flex;

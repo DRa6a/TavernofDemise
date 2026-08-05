@@ -16,26 +16,26 @@ interface EchoPanelProps {
   onUseEcho: (player: Player, echoId: string, target?: Player) => { ok: boolean; reason?: string };
 }
 
-/** 根据 trigger 字段判断该回响在当前阶段是否可用 */
+/** 根据 trigger 字段判断该回响在当前阶段是否亮起。
+ *  设计原则：
+ *  - `any` / 玩家主动触发的时机：只要还没出 / 开牌就一直可点
+ *  - `when-die`：死亡时自动，不在 UI 主动使用
+ *  - 其余严格按 trigger 匹配
+ */
 function isTriggerOk(trigger: EchoDefinition['trigger'], phase: GamePhase): boolean {
+  if (trigger === 'when-die') return false;
   if (trigger === 'any') return true;
   switch (trigger) {
     case 'play-phase':
     case 'open-phase':
-      return phase === GamePhase.PLAYING || phase === GamePhase.OPENING;
     case 'small-round':
     case 'big-round':
+    case 'after-life-death':
+    case 'before-draw':
       return phase === GamePhase.PLAYING || phase === GamePhase.OPENING;
     case 'life-death':
     case 'before-life-death':
       return phase === GamePhase.LIFE_DEATH;
-    case 'after-life-death':
-    case 'before-draw':
-      // 这些都是大回合开始/结束时点，UI 上放到 PLAYING/OPENING 时也可以视为「小回合内」
-      return phase === GamePhase.PLAYING;
-    case 'when-die':
-      // 玩家死亡时自动触发，不在 UI 中主动使用
-      return false;
     default:
       return false;
   }

@@ -35,6 +35,8 @@ export function Game() {
     useEcho,
     echoDefs,
     stateDefs,
+    echoPause,
+    resumeAfterEcho,
   } = useGameStore();
 
   useEffect(() => {
@@ -191,6 +193,34 @@ export function Game() {
 
       {gameOverOverlay?.show && <GameOverOverlay winnerName={gameOverOverlay.name} />}
       {deathOverlay?.show && <DeathOverlay playerName={deathOverlay.name} />}
+      {echoPause && <EchoPauseOverlay info={echoPause} onResume={resumeAfterEcho} />}
+    </div>
+  );
+}
+
+interface EchoPauseOverlayProps {
+  info: { playerId: string; echoId: string; reason: string };
+  onResume: () => void;
+}
+
+function EchoPauseOverlay({ info, onResume }: EchoPauseOverlayProps) {
+  const isHuman = info.playerId === 'p0';
+  return (
+    <div className="echo-pause-overlay" onClick={isHuman ? onResume : undefined}>
+      <div className="echo-pause-card" onClick={(e) => e.stopPropagation()}>
+        <h3>⏸  进程暂停</h3>
+        <p className="echo-pause-reason">{info.reason}</p>
+        <p className="hint">
+          {isHuman
+            ? '回响已生效。点「继续」让游戏推进。'
+            : 'AI 正在结算中…'}
+        </p>
+        {isHuman && (
+          <button type="button" className="btn-primary" onClick={onResume}>
+            继续
+          </button>
+        )}
+      </div>
     </div>
   );
 }

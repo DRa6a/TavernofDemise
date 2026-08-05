@@ -63,10 +63,14 @@ interface GameStore {
   rerollEcho: (playerId: string, echoIdToDiscard: string) => void;
   /** 使用一个回响（应用 cast 副作用） */
   useEcho: (playerId: string, echoId: string, targetId?: string) => { ok: boolean; reason?: string };
+  /** 玩家使用回响后，回合进程暂停；调用此函数让游戏继续 */
+  resumeAfterEcho: () => void;
   /** 当前 mod 注册的回响定义列表 */
   echoDefs: import('../core/mod/types').EchoDefinition[];
   /** 当前 mod 注册的状态定义列表 */
   stateDefs: import('../core/mod/types').PlayerStateEffect[];
+  /** 是否处于「使用回响后暂停」状态 */
+  echoPause: { playerId: string; echoId: string; reason: string } | null;
 }
 
 const HUMAN_ID = 'p0';
@@ -94,6 +98,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   modLoader: null,
   echoDefs: [],
   stateDefs: [],
+  echoPause: null,
 
   startGame: (configs) => {
     const { modLoader } = get();
@@ -330,7 +335,28 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     set({ gameState: { ...manager.getState() } });
+    // 使用回响后暂停进程
+    const reason = (modApi && typeof modApi.useEcho === 'function')
+      ? `已使用：${(echoDefs as Array<{ id: string; name: string }>).find((d) => d.id === echoId)?.name ?? echoId}`
+      : `已使用：${echoId}`;
+    set({
+      echoPause: { playerId, echoId, reason },
+      aiThinking: false,
+    });
+    if (player.isHuman) {
+      // 人类使用：等待「继续」按钮
+      return { ok: true };
+    }
+    // AI 使用：暂停 1.2 秒后自动继续
+    window.setTimeout(() => {
+      get().resumeAfterEcho();
+    }, 1200);
     return { ok: true };
+  },
+
+  resumeAfterEcho: () => {
+    set({ echoPause: null });
+    get().runAiLoop();
   },
 
   loadModFromUrl: async (url, source) => {
@@ -497,6 +523,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const store = get();
     if (!store.manager || !store.gameState) return;
 
+    // 暂停中：等待玩家点「继续」
+    if (store.echoPause) {
+      if (store.echoPause.playerId === 'p0') {
+        set({ aiThinking: false });
+        return;
+      }
+      // AI 玩家使用回响，resumeAfterEcho 会再次调用 runAiLoop
+      return;
+    }
+
     const state = store.gameState;
     if (state.phase === GamePhase.GAME_OVER) return;
 
@@ -542,6 +578,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       const random = new SeededRandom(Date.now());
       const strategy = new BaseStrategy(random);
+
+      // AI 先决定是否使用回响（pause 期间会被 useEcho 自己恢复）
+      const echoDefs = get().echoDefs;
+      if (echoDefs.length > 0) {
+        const decision = strategy.decideEcho(
+          { player: aiPlayer, state: currentState, lastPlay: currentState.lastPlay },
+          echoDefs,
+        );
+        if (decision) {
+          // useEcho 会设置 echoPause + 800ms 后自动 resumeAfterEcho → runAiLoop
+          get().useEcho(aiPlayer.id, decision.echoId, decision.targetId);
+          return;
+        }
+      }
 
       if (currentState.phase === GamePhase.PLAYING) {
         const cards = strategy.decidePlay({ player: aiPlayer, state: currentState, lastPlay: currentState.lastPlay });

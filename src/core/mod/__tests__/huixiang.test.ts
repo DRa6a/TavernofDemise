@@ -5,6 +5,7 @@ import { parseModFile } from '../parser';
 import { loadModFromString, DefaultModLoader } from '../mod-loader';
 import { SeededRandom } from '../../engine/random';
 import { RoundManager } from '../../engine/round-manager';
+import { BaseStrategy } from '../../ai/base-strategy';
 
 describe('回响模组 (docs/回响.md)', () => {
   const raw = readFileSync(join(process.cwd(), 'docs/回响.md'), 'utf-8');
@@ -87,6 +88,57 @@ describe('回响模组 (docs/回响.md)', () => {
     expect(loader.listStates()).toHaveLength(8);
     expect(loader.listPhases()).toHaveLength(1);
     expect(loader.listPhases()[0].insertAt).toBe('before-election');
+  });
+
+  it('AI 策略 decideEcho 在 playing 阶段能给可用回响打勾', () => {
+    const strategy = new BaseStrategy(new SeededRandom(42));
+    const ctx = {
+      player: {
+        id: 'p2', name: 'p2', isHuman: false, hand: [],
+        isDead: false, isOutOfRound: false, position: 1,
+        availableBeasts: [], rolledFaces: [],
+        modData: { echoes: [{ id: 'tannang', remaining: 2 }, { id: 'chiyan', remaining: 4 }, { id: 'zhaozai', remaining: 3 }] },
+        stateEffectIds: [],
+      } as any,
+      state: {
+        phase: 'playing', players: [
+          { id: 'p1', isDead: false, hand: [] } as any,
+          { id: 'p2', isDead: false, hand: [] } as any,
+        ],
+        lastPlay: undefined,
+      } as any,
+    };
+    const echoDefs = [
+      { id: 'tannang', name: '探囊', trigger: 'play-phase' as const, maxUses: 2, shortName: '探囊', effect: 'x' },
+      { id: 'chiyan', name: '赤炎', trigger: 'play-phase' as const, maxUses: 4, shortName: '赤炎', effect: 'x' },
+      { id: 'zhaozai', name: '招灾', trigger: 'small-round' as const, maxUses: 3, shortName: '招灾', effect: 'x' },
+    ];
+    let anyHit = false;
+    for (let i = 0; i < 30; i++) {
+      const r = strategy.decideEcho(ctx, echoDefs);
+      if (r !== null) { anyHit = true; break; }
+    }
+    expect(anyHit).toBe(true);
+  });
+
+  it('AI 策略对 when-die 触发器不主动使用', () => {
+    const strategy = new BaseStrategy(new SeededRandom(7));
+    const ctx = {
+      player: {
+        id: 'p2', name: 'p2', isHuman: false, hand: [],
+        isDead: false, isOutOfRound: false, position: 1,
+        availableBeasts: [], rolledFaces: [],
+        modData: { echoes: [{ id: 'bumie', remaining: 1 }] },
+        stateEffectIds: [],
+      } as any,
+      state: { phase: 'playing', players: [] } as any,
+    };
+    const echoDefs = [
+      { id: 'bumie', name: '不灭', trigger: 'when-die' as const, maxUses: 1, shortName: '不灭', effect: 'x' },
+    ];
+    for (let i = 0; i < 20; i++) {
+      expect(strategy.decideEcho(ctx, echoDefs)).toBeNull();
+    }
   });
 
   it('招灾 / 忘忧 应能正确应用与解除状态', () => {
