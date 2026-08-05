@@ -4,6 +4,17 @@ import { BaseStrategy } from '../core/ai/base-strategy';
 import { SeededRandom } from '../core/engine/random';
 import { GamePhase } from '../utils/constants';
 import type { Card, DivineBeast, GameState, Player, PlayerConfig } from '../core/models/types';
+import { DefaultModLoader, loadModFromString } from '../core/mod/mod-loader';
+import type { GameMod, ModLoader } from '../core/mod/types';
+
+interface LoadedMod {
+  id: string;
+  name: string;
+  version: string;
+  author?: string;
+  description?: string;
+  errors: string[];
+}
 
 interface GameStore {
   manager: RoundManager | null;
@@ -13,6 +24,11 @@ interface GameStore {
   selectedCardIds: string[];
   aiThinking: boolean;
   revealAll: boolean;
+
+  /** 已加载的 mod 列表（按加载顺序） */
+  loadedMods: LoadedMod[];
+  /** 共享的 mod 加载器实例 */
+  modLoader: ModLoader | null;
 
   startGame: (configs: PlayerConfig[]) => void;
   playCards: (cardIds: string[]) => void;
@@ -26,11 +42,23 @@ interface GameStore {
   clearSelection: () => void;
   setRevealAll: (value: boolean) => void;
   runAiLoop: () => void;
+
+  /** 从 URL 加载一个 .mod.md 文件 */
+  loadModFromUrl: (url: string, source?: string) => Promise<LoadedMod | null>;
+  /** 从字符串加载（通常来自 <input type="file">） */
+  loadModFromString: (raw: string, source: string) => LoadedMod;
+  /** 卸载指定 mod */
+  unloadMod: (modId: string) => void;
+  /** 卸载全部 mod */
+  unloadAllMods: () => void;
 }
 
 const HUMAN_ID = 'p0';
 
-function createManager(): RoundManager {
+function createManager(modLoader: ModLoader | null = null): RoundManager {
+  if (modLoader) {
+    return new RoundManager({ random: new SeededRandom(Date.now()), modLoader });
+  }
   return new RoundManager(new SeededRandom(Date.now()));
 }
 
@@ -46,9 +74,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
   selectedCardIds: [],
   aiThinking: false,
   revealAll: false,
+  loadedMods: [],
+  modLoader: null,
 
   startGame: (configs) => {
-    const manager = createManager();
+    const { modLoader } = get();
+    const manager = createManager(modLoader);
     manager.startGame(configs);
     set({
       manager,
@@ -58,6 +89,79 @@ export const useGameStore = create<GameStore>((set, get) => ({
       selectedCardIds: [],
     });
     get().runAiLoop();
+  },
+
+  loadModFromUrl: async (url, source) => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const text = await res.text();
+      const entry = get().loadModFromString(text, source ?? url);
+      return entry;
+    } catch (e) {
+      const failed: LoadedMod = {
+        id: '',
+        name: url,
+        version: '',
+        errors: [`加载失败：${(e as Error).message}`],
+      };
+      set((s) => ({ loadedMods: [...s.loadedMods, failed] }));
+      return failed;
+    }
+  },
+
+  loadModFromString: (raw, source) => {
+    let loader = get().modLoader;
+    if (!loader) {
+      loader = new DefaultModLoader();
+    }
+    const res = loadModFromString(loader, raw, source);
+    if (!res.ok || !res.mod) {
+      const failed: LoadedMod = {
+        id: '',
+        name: source,
+        version: '',
+        errors: res.errors,
+      };
+      set((s) => ({
+        modLoader: loader,
+        loadedMods: [...s.loadedMods, failed],
+      }));
+      return failed;
+    }
+    const m: GameMod = res.mod;
+    const entry: LoadedMod = {
+      id: m.id,
+      name: m.name,
+      version: m.version,
+      author: m.author,
+      description: m.description,
+      errors: [],
+    };
+    set((s) => ({
+      modLoader: loader,
+      loadedMods: s.loadedMods.some((x) => x.id === m.id)
+        ? s.loadedMods
+        : [...s.loadedMods, entry],
+    }));
+    return entry;
+  },
+
+  unloadMod: (modId) => {
+    const { modLoader } = get();
+    if (!modLoader) return;
+    modLoader.unregister(modId);
+    set((s) => ({ loadedMods: s.loadedMods.filter((m) => m.id !== modId) }));
+  },
+
+  unloadAllMods: () => {
+    const { modLoader } = get();
+    if (modLoader) {
+      for (const m of get().loadedMods) {
+        if (m.id) modLoader.unregister(m.id);
+      }
+    }
+    set({ loadedMods: [] });
   },
 
   playCards: (cardIds) => {
