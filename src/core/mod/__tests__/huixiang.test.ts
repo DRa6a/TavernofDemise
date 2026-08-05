@@ -59,10 +59,34 @@ describe('回响模组 (docs/回响.md)', () => {
     ]);
     const state = rm.getState();
     expect(state.players).toHaveLength(2);
-    // onBeforeElection 已为每个玩家派发 3 个回响
+    // 由于 mod 注册了 before-election 阻塞阶段，应进入 INSPIRING 阶段
+    expect(state.phase).toBe('inspiring');
+  });
+
+  it('completeInspirePhase 后每位玩家获得 3 个回响', () => {
+    const loader = new DefaultModLoader();
+    loadModFromString(loader, raw, 'docs/回响.md');
+    const rm = new RoundManager({ random: new SeededRandom(7), modLoader: loader });
+    rm.startGame([
+      { id: 'p1', name: '玩家1', isHuman: false },
+      { id: 'p2', name: '玩家2', isHuman: false },
+    ]);
+    expect(rm.getState().phase).toBe('inspiring');
+    rm.completeInspirePhase();
+    const state = rm.getState();
+    expect(state.phase).not.toBe('inspiring');
     for (const p of state.players) {
       expect(p.modData?.echoes).toHaveLength(3);
     }
+  });
+
+  it('ModLoader 暴露 echoDefs / stateDefs', () => {
+    const loader = new DefaultModLoader();
+    loadModFromString(loader, raw, 'docs/回响.md');
+    expect(loader.listEchoes()).toHaveLength(34);
+    expect(loader.listStates()).toHaveLength(8);
+    expect(loader.listPhases()).toHaveLength(1);
+    expect(loader.listPhases()[0].insertAt).toBe('before-election');
   });
 
   it('招灾 / 忘忧 应能正确应用与解除状态', () => {

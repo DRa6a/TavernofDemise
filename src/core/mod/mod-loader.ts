@@ -2,13 +2,16 @@
 import type { Card } from '../models/types';
 import type { RuleEngine } from '../engine/rule-engine';
 import type {
+  EchoDefinition,
   EchoRegistry,
   GameMod,
   ModContext,
   ModHooks,
   ModLoader,
   ModManifest,
+  PhaseDefinition,
   PhaseRegistry,
+  PlayerStateEffect,
   PlayerStateRegistry,
 } from './types';
 import {
@@ -20,6 +23,9 @@ import { parseModFile } from './parser';
 
 export class DefaultModLoader implements ModLoader {
   private mods: GameMod[] = [];
+  private stateRegistry: PlayerStateRegistry = new DefaultPlayerStateRegistry();
+  private phaseRegistry: PhaseRegistry = new DefaultPhaseRegistry();
+  private echoRegistry: EchoRegistry = new DefaultEchoRegistry();
   private logger: (msg: string, ...args: unknown[]) => void;
 
   constructor(logger?: (msg: string, ...args: unknown[]) => void) {
@@ -35,6 +41,17 @@ export class DefaultModLoader implements ModLoader {
     this.mods.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
     this.logger(`注册 mod: ${mod.id} v${mod.version}`);
 
+    // 注册该 mod 携带的数据
+    if (mod.data?.states) {
+      for (const s of mod.data.states) this.stateRegistry.register(s);
+    }
+    if (mod.data?.phases) {
+      for (const p of mod.data.phases) this.phaseRegistry.register(p);
+    }
+    if (mod.data?.echoes) {
+      for (const e of mod.data.echoes) this.echoRegistry.register(e);
+    }
+
     // 立即触发 onRegister，让 mod 填充它的数据
     if (mod.onRegister) {
       const ctx = this.buildContext();
@@ -48,10 +65,22 @@ export class DefaultModLoader implements ModLoader {
 
   unregister(modId: string): void {
     const idx = this.mods.findIndex((m) => m.id === modId);
-    if (idx >= 0) {
-      this.mods.splice(idx, 1);
-      this.logger(`注销 mod: ${modId}`);
+    if (idx < 0) return;
+    const mod = this.mods[idx];
+    this.mods.splice(idx, 1);
+    // 清理该 mod 注册的数据
+    if (mod.data?.states) {
+      for (const s of mod.data.states) delete this.stateRegistry.effects[s.id];
     }
+    if (mod.data?.phases) {
+      this.phaseRegistry.phases = this.phaseRegistry.phases.filter(
+        (p) => !mod.data!.phases!.some((mp) => mp.id === p.id),
+      );
+    }
+    if (mod.data?.echoes) {
+      for (const e of mod.data.echoes) delete this.echoRegistry.echoes[e.id];
+    }
+    this.logger(`注销 mod: ${modId}`);
   }
 
   getActiveMods(): GameMod[] {
@@ -60,6 +89,35 @@ export class DefaultModLoader implements ModLoader {
 
   getById(id: string): GameMod | undefined {
     return this.mods.find((m) => m.id === id);
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // 供 UI 读取的注册表
+  // ────────────────────────────────────────────────────────────
+
+  getStateRegistry(): PlayerStateRegistry {
+    return this.stateRegistry;
+  }
+
+  getPhaseRegistry(): PhaseRegistry {
+    return this.phaseRegistry;
+  }
+
+  getEchoRegistry(): EchoRegistry {
+    return this.echoRegistry;
+  }
+
+  // 便捷 API：列出所有已注册的回响 / 状态 / 阶段
+  listEchoes(): EchoDefinition[] {
+    return this.echoRegistry.list();
+  }
+
+  listStates(): PlayerStateEffect[] {
+    return this.stateRegistry.list();
+  }
+
+  listPhases(): PhaseDefinition[] {
+    return this.phaseRegistry.list();
   }
 
   // ────────────────────────────────────────────────────────────

@@ -10,6 +10,8 @@ import { TruthBanner } from './TruthBanner';
 import { DebugPanel } from './DebugPanel';
 import { GameOverOverlay } from './GameOverOverlay';
 import { DeathOverlay } from './DeathOverlay';
+import { InspirePhase } from './InspirePhase';
+import { EchoPanel } from './EchoPanel';
 import { GamePhase } from '../utils/constants';
 
 export function Game() {
@@ -28,6 +30,11 @@ export function Game() {
     drawDice,
     resolveDiceAnimation,
     toggleCard,
+    completeInspirePhase,
+    rerollEcho,
+    useEcho,
+    echoDefs,
+    stateDefs,
   } = useGameStore();
 
   useEffect(() => {
@@ -62,6 +69,7 @@ export function Game() {
   const opponents = gameState.players.filter((p) => p.id !== HUMAN_ID);
 
   const isLifeDeath = gameState.phase === GamePhase.LIFE_DEATH;
+  const isInspiring = gameState.phase === GamePhase.INSPIRING;
   const pendingLoser = isLifeDeath && gameState.pendingLifeDeath
     ? gameState.players.find((p) => p.id === gameState.pendingLifeDeath!.loserId)
     : undefined;
@@ -111,6 +119,8 @@ export function Game() {
               selectedIds={[]}
               revealAll={revealAll}
               onToggleCard={() => {}}
+              echoDefs={echoDefs}
+              stateDefs={stateDefs}
             />
           ))}
         </section>
@@ -119,7 +129,14 @@ export function Game() {
         {!(isLifeDeath && !revealDelay) && <TruthBanner truthPhase={gameState.truthPhase} />}
 
         <section className="table-center">
-          {revealDelay ? (
+          {isInspiring ? (
+            <InspirePhase
+              players={gameState.players}
+              echoDefs={echoDefs}
+              onReroll={rerollEcho}
+              onConfirm={completeInspirePhase}
+            />
+          ) : revealDelay ? (
             <TablePlay lastPlay={gameState.lastPlay} truthPhase={gameState.truthPhase} revealAll={revealAll} />
           ) : isLifeDeath && pendingLoser ? (
             <DiceDraw
@@ -142,6 +159,15 @@ export function Game() {
                 onChallenge={() => openPhase('challenge')}
                 onPass={() => openPhase('pass')}
               />
+              {humanPlayer && echoDefs.length > 0 && !isLifeDeath && (
+                <EchoPanel
+                  player={humanPlayer}
+                  allPlayers={gameState.players}
+                  phase={gameState.phase}
+                  echoDefs={echoDefs}
+                  onUseEcho={(p, e, t) => useEcho(p.id, e, t?.id)}
+                />
+              )}
             </>
           )}
         </section>
@@ -149,12 +175,15 @@ export function Game() {
         <section className="human-area">
           {humanPlayer && (
             <PlayerSeat
+              key={humanPlayer.id}
               player={humanPlayer}
               isActive={humanPlayer.id === gameState.activePlayerId}
               isHuman={true}
               selectedIds={selectedCardIds}
               revealAll={revealAll}
               onToggleCard={toggleCard}
+              echoDefs={echoDefs}
+              stateDefs={stateDefs}
             />
           )}
         </section>
@@ -169,6 +198,7 @@ export function Game() {
 function phaseLabel(phase: string): string {
   const map: Record<string, string> = {
     waiting: '等待',
+    inspiring: '激发',
     election: '选举',
     drawing: '抽牌',
     truth: '真牌',

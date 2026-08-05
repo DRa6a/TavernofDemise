@@ -5,7 +5,12 @@ import { SeededRandom } from '../core/engine/random';
 import { GamePhase } from '../utils/constants';
 import type { Card, DivineBeast, GameState, Player, PlayerConfig } from '../core/models/types';
 import { DefaultModLoader, loadModFromString } from '../core/mod/mod-loader';
-import type { GameMod, ModLoader } from '../core/mod/types';
+import type {
+  EchoDefinition,
+  GameMod,
+  ModLoader,
+  PlayerStateEffect,
+} from '../core/mod/types';
 
 interface LoadedMod {
   id: string;
@@ -51,6 +56,17 @@ interface GameStore {
   unloadMod: (modId: string) => void;
   /** 卸载全部 mod */
   unloadAllMods: () => void;
+
+  /** 完成激发回合（确认每个玩家已查看 / 调整） */
+  completeInspirePhase: () => void;
+  /** 玩家在激发回合中重抽 1 个回响 */
+  rerollEcho: (playerId: string, echoIdToDiscard: string) => void;
+  /** 使用一个回响（应用 cast 副作用） */
+  useEcho: (playerId: string, echoId: string, targetId?: string) => { ok: boolean; reason?: string };
+  /** 当前 mod 注册的回响定义列表 */
+  echoDefs: import('../core/mod/types').EchoDefinition[];
+  /** 当前 mod 注册的状态定义列表 */
+  stateDefs: import('../core/mod/types').PlayerStateEffect[];
 }
 
 const HUMAN_ID = 'p0';
@@ -76,6 +92,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   revealAll: false,
   loadedMods: [],
   modLoader: null,
+  echoDefs: [],
+  stateDefs: [],
 
   startGame: (configs) => {
     const { modLoader } = get();
@@ -89,6 +107,230 @@ export const useGameStore = create<GameStore>((set, get) => ({
       selectedCardIds: [],
     });
     get().runAiLoop();
+  },
+
+  completeInspirePhase: () => {
+    const { manager } = get();
+    if (!manager) return;
+    manager.completeInspirePhase();
+    set({ gameState: { ...manager.getState() } });
+    get().runAiLoop();
+  },
+
+  rerollEcho: (playerId, echoIdToDiscard) => {
+    const { manager } = get();
+    if (!manager) return;
+    manager.rerollEcho(playerId, echoIdToDiscard);
+    set({ gameState: { ...manager.getState() } });
+  },
+
+  useEcho: (playerId, echoId, targetId) => {
+    const { manager } = get();
+    if (!manager) return { ok: false, reason: 'no_manager' };
+    const state = manager.getState();
+    const player = state.players.find((p) => p.id === playerId);
+    if (!player) return { ok: false, reason: 'no_player' };
+    const target = targetId ? state.players.find((p) => p.id === targetId) : undefined;
+
+    // 1) 扣使用次数
+    const result = manager.useEcho(player, echoId);
+    if (!result.ok) {
+      set({ gameState: { ...state } });
+      return result;
+    }
+
+    // 2) 根据回响 id 执行对应 cast 副作用
+    const loader = get().modLoader;
+    const mod = loader?.getById('huixiang') as (GameMod & Record<string, unknown>) | undefined;
+    const modApi = mod as Record<string, unknown> | undefined;
+
+    try {
+      switch (echoId) {
+        case 'zhaozai':
+          if (target && modApi && typeof modApi.castZhaozai === 'function') {
+            (modApi.castZhaozai as (a: Player, b: Player) => void)(player, target);
+          }
+          break;
+        case 'zhiai':
+          if (target && modApi && typeof modApi.castZhiai === 'function') {
+            (modApi.castZhiai as (t: Player) => void)(target);
+          }
+          break;
+        case 'baoshan':
+          if (modApi && typeof modApi.castBaoshan === 'function') {
+            (modApi.castBaoshan as (c: Player, s: GameState) => void)(player, state);
+          }
+          break;
+        case 'rumeng':
+          if (target && modApi && typeof modApi.castRumeng === 'function') {
+            (modApi.castRumeng as (t: Player, r: () => number) => void)(
+              target,
+              () => Math.random(),
+            );
+          }
+          break;
+        case 'wangyou':
+          if (target && modApi && typeof modApi.castWangyou === 'function') {
+            (modApi.castWangyou as (t: Player) => boolean)(target);
+          }
+          break;
+        case 'tianxingjian':
+          if (modApi && typeof modApi.castTianxingjian === 'function') {
+            (modApi.castTianxingjian as (p: Player) => void)(player);
+          }
+          break;
+        case 'jifa':
+          if (target && modApi && typeof modApi.grantEchoes === 'function') {
+            (modApi.grantEchoes as (p: Player, r: () => number) => unknown[])(
+              target,
+              () => Math.random(),
+            );
+          }
+          break;
+        case 'dianren': {
+          if (target && target.modData) {
+            const arr = ((target.modData as Record<string, unknown>).echoes as Array<{
+              id: string;
+              remaining: number;
+            }>) ?? [];
+            if (arr.length > 0) {
+              arr.splice(Math.floor(Math.random() * arr.length), 1);
+              (target.modData as Record<string, unknown>).echoes = arr;
+            }
+          }
+          break;
+        }
+        case 'powanfa': {
+          if (target && target.modData) {
+            const arr = ((target.modData as Record<string, unknown>).echoes as Array<{
+              id: string;
+              remaining: number;
+            }>) ?? [];
+            if (arr.length > 0) {
+              const pick = arr[Math.floor(Math.random() * arr.length)];
+              pick.remaining = Math.max(0, pick.remaining - 1);
+            }
+          }
+          break;
+        }
+        case 'qiaowu': {
+          const deck = state.deck;
+          if (player.hand.length > 0 && deck.length > 0) {
+            const i = Math.floor(Math.random() * player.hand.length);
+            const j = Math.floor(Math.random() * deck.length);
+            const tmp = player.hand[i];
+            player.hand[i] = deck[j];
+            deck[j] = tmp;
+          }
+          break;
+        }
+        case 'chiyan': {
+          player.hand = [];
+          if (state.deck.length > 0) {
+            const i = Math.floor(Math.random() * state.deck.length);
+            player.hand.push(state.deck[i]);
+            state.deck.splice(i, 1);
+          }
+          break;
+        }
+        case 'yinni': {
+          if (target) {
+            if (!target.modData) target.modData = {};
+            (target.modData as Record<string, unknown>).__hiddenDao = true;
+          }
+          break;
+        }
+        case 'yanpin': {
+          if (state.deck.length > 0) {
+            const i = Math.floor(Math.random() * state.deck.length);
+            const card = state.deck[i];
+            state.deck.splice(i, 1);
+            (target ?? player).hand.push(card);
+          }
+          break;
+        }
+        case 'tannang': {
+          const t = target ?? player;
+          const pool = t.hand;
+          if (pool.length > 0) {
+            const i = Math.floor(Math.random() * pool.length);
+            const [c] = pool.splice(i, 1);
+            player.hand.push(c);
+          }
+          break;
+        }
+        case 'huaxing': {
+          const t = target ?? player;
+          if (t.hand.length > 0) {
+            const i = Math.floor(Math.random() * t.hand.length);
+            t.hand[i] = { ...t.hand[i], phase: '道' as Card['phase'] };
+          }
+          break;
+        }
+        case 'shuangshenghua': {
+          if (target) {
+            manager.addState(player, 'shuangshenghua', 1);
+            manager.addState(target, 'shuangshenghua', 1);
+          }
+          break;
+        }
+        case 'lunhuibuzhi': {
+          state.players.forEach((p) => {
+            if (!p.isDead) {
+              state.discardPile.push(...p.hand);
+              p.hand = [];
+            }
+          });
+          state.currentRound += 1;
+          state.lastPlay = undefined;
+          break;
+        }
+        case 'xianling': {
+          if (modApi && typeof modApi.grantEchoes === 'function') {
+            (modApi.grantEchoes as (p: Player, r: () => number) => unknown[])(
+              player,
+              () => Math.random(),
+            );
+          }
+          break;
+        }
+        case 'jiahuo':
+        case 'tizui':
+        case 'qiangyun': {
+          if (!player.modData) player.modData = {};
+          (player.modData as Record<string, unknown>).__shieldLifeDeath = echoId;
+          break;
+        }
+        case 'shengshengbuxi': {
+          if (target && target.isDead) {
+            target.isDead = false;
+            target.stateEffectIds = (target.stateEffectIds ?? []).filter(
+              (s) => s !== 'suoding',
+            );
+            target.availableBeasts = ['天龙', '白羊', '青龙', '白虎', '朱雀', '玄武'];
+          }
+          break;
+        }
+        case 'zhiyu': {
+          if (target && target.isDead) {
+            target.isDead = false;
+            target.availableBeasts = ['天龙'];
+          }
+          break;
+        }
+        case 'bumie': {
+          // 「不灭」：死亡时由 onPlayerDied 自动处理
+          break;
+        }
+        default:
+          break;
+      }
+    } catch (e) {
+      // cast 失败不阻塞
+    }
+
+    set({ gameState: { ...manager.getState() } });
+    return { ok: true };
   },
 
   loadModFromUrl: async (url, source) => {
@@ -143,6 +385,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       loadedMods: s.loadedMods.some((x) => x.id === m.id)
         ? s.loadedMods
         : [...s.loadedMods, entry],
+      echoDefs: loader!.listEchoes(),
+      stateDefs: loader!.listStates(),
     }));
     return entry;
   },
@@ -151,7 +395,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { modLoader } = get();
     if (!modLoader) return;
     modLoader.unregister(modId);
-    set((s) => ({ loadedMods: s.loadedMods.filter((m) => m.id !== modId) }));
+    set((s) => ({
+      loadedMods: s.loadedMods.filter((m) => m.id !== modId),
+      echoDefs: modLoader.listEchoes(),
+      stateDefs: modLoader.listStates(),
+    }));
   },
 
   unloadAllMods: () => {
@@ -161,7 +409,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         if (m.id) modLoader.unregister(m.id);
       }
     }
-    set({ loadedMods: [] });
+    set({ loadedMods: [], echoDefs: [], stateDefs: [] });
   },
 
   playCards: (cardIds) => {

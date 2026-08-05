@@ -106,7 +106,70 @@ export class RoundManager {
     this.emit({ type: 'GAME_STARTED', players });
     this.hook('onBeforeGameStart', this.state);
     this.hook('onGameStart', this.state);
+    this.beginInspirePhase();
+  }
+
+  /**
+   * 激发回合（mod 扩展）：若 mod 注册了 `before-election` 阻塞阶段，
+   * 则切换到 INSPIRING 阶段等待 UI 完成；否则直接进入选举。
+   */
+  private beginInspirePhase(): void {
+    const blocking = this.findBlockingPhase('before-election');
+    if (blocking) {
+      this.state.phase = GamePhase.INSPIRING;
+      this.state.modData = { ...(this.state.modData ?? {}), __inspirePhaseId: blocking.id };
+      // 让 mod 知道「现在进入激发回合」—— 真正派发回响放在 completeInspirePhase
+      // 这里先发一个事件，方便 UI 显示「激发回合开始」提示
+      this.emit({ type: 'INSPIRE_PHASE_STARTED', phaseId: blocking.id } as GameEvent);
+      return;
+    }
     this.electFirstPlayer();
+  }
+
+  /**
+   * 玩家完成激发回合操作（看到/丢弃/重抽）后调用，进入选举首位玩家
+   */
+  completeInspirePhase(): void {
+    if (this.state.phase !== GamePhase.INSPIRING) {
+      throw new Error('当前不是激发回合');
+    }
+    // 触发 mod 的 onBeforeElection，让它为玩家抽取回响
+    this.electFirstPlayer();
+  }
+
+  /** 丢弃一个回响并重新抽取（激发回合的可选操作） */
+  rerollEcho(playerId: string, echoIdToDiscard: string): boolean {
+    if (this.state.phase !== GamePhase.INSPIRING) return false;
+    const player = this.state.players.find((p) => p.id === playerId);
+    if (!player || !player.modData) return false;
+    const echoes = (player.modData.echoes as Array<{ id: string; remaining: number }>) ?? [];
+    const idx = echoes.findIndex((e) => e.id === echoIdToDiscard);
+    if (idx < 0) return false;
+    // 调 mod 提供的 grantEchoes 重新拿一个（实际为「重抽 1 个」）
+    const mod = this.modLoader?.getById('huixiang');
+    if (mod && typeof (mod as Record<string, unknown>).grantEchoes === 'function') {
+      const grant = (mod as Record<string, unknown>).grantEchoes as (
+        p: Player,
+        rng: () => number,
+      ) => Array<{ id: string; remaining: number }>;
+      // 丢弃选中的，再补 1 个新的
+      echoes.splice(idx, 1);
+      const rng = () => this.random.next();
+      const fresh = grant(player, rng);
+      if (fresh.length > 0) echoes.push(fresh[0]);
+      player.modData.echoes = echoes;
+      return true;
+    }
+    return false;
+  }
+
+  private findBlockingPhase(point: string): { id: string; name: string } | null {
+    if (!this.modLoader) return null;
+    const phases = this.modLoader.listPhases();
+    const match = phases.find(
+      (p) => p.insertAt === point && (p as { blocking?: boolean }).blocking === true,
+    );
+    return match ? { id: match.id, name: match.name } : null;
   }
 
   electFirstPlayer(): void {
@@ -203,6 +266,15 @@ export class RoundManager {
 
     this.hook('onBeforePlay', this.state, player, cardIds);
 
+    // 「哀昏」状态：跳过本回合出牌
+    if (this.hasState(player, 'aihun')) {
+      this.clearState(player, 'aihun');
+      player.isOutOfRound = true;
+      this.emit({ type: 'PLAYER_OUT_OF_ROUND', playerId });
+      this.advanceAfterOutOfRound();
+      return;
+    }
+
     const cards: Card[] = [];
     for (const cardId of cardIds) {
       const index = player.hand.findIndex((c) => c.id === cardId);
@@ -232,15 +304,21 @@ export class RoundManager {
       }
     }
 
+    this.advanceAfterOutOfRound();
+  }
+
+  /** 出牌或被「哀昏」跳过后的统一推进 */
+  private advanceAfterOutOfRound(): void {
     const alivePlayers = this.state.players.filter((p) => !p.isDead);
     if (alivePlayers.length > 0 && alivePlayers.every((p) => p.isOutOfRound)) {
       this.hook('onBigRoundEnd', this.state, this.state.currentRound);
-      this.state.discardPile.push(...this.state.lastPlay!.cards);
-      this.state.lastPlay = undefined;
+      if (this.state.lastPlay) {
+        this.state.discardPile.push(...this.state.lastPlay.cards);
+        this.state.lastPlay = undefined;
+      }
       this.startRound();
       return;
     }
-
     this.state.activePlayerId = this.ruleEngine.getNextActivePlayer(this.state);
     this.state.phase = GamePhase.OPENING;
   }
@@ -252,6 +330,11 @@ export class RoundManager {
 
     const challenger = this.state.players.find((p) => p.id === this.state.activePlayerId);
     if (!challenger) throw new Error('当前玩家不存在');
+
+    // 「受控」状态：必须质疑
+    if (decision === 'pass' && this.hasState(challenger, 'shoukong')) {
+      decision = 'challenge';
+    }
 
     this.emit({ type: 'CHALLENGE_DECISION', playerId: challenger.id, decision });
     this.hook('onBeforeOpen', this.state);
@@ -267,6 +350,22 @@ export class RoundManager {
           isFake: result.isFake,
         });
         this.hook('onAfterOpen', this.state, result.isFake);
+      }
+
+      // 「自我质疑跳过大回合」：mod 在 onBeforeOpen 里标记 state.modData.skipBigRound
+      if (this.state.modData && (this.state.modData as Record<string, unknown>).skipBigRound) {
+        this.state.players.forEach((p) => {
+          if (!p.isDead) p.isOutOfRound = true;
+        });
+        // 清理标记 + 把最后的牌丢入弃牌堆
+        delete (this.state.modData as Record<string, unknown>).skipBigRound;
+        this.hook('onBigRoundEnd', this.state, this.state.currentRound);
+        if (this.state.lastPlay) {
+          this.state.discardPile.push(...this.state.lastPlay.cards);
+          this.state.lastPlay = undefined;
+        }
+        this.startRound();
+        return;
       }
 
       this.state.phase = GamePhase.LIFE_DEATH;
@@ -298,7 +397,14 @@ export class RoundManager {
 
     this.hook('onBeforeLifeDeath', this.state, loser);
 
-    const finalFace = face ?? loser.availableBeasts[Math.floor(this.random.next() * loser.availableBeasts.length)];
+    // 「天行健」强制改面：mod 在 onBeforeLifeDeath 写入 loser.modData.__forcedFace
+    const forced = loser.modData
+      ? (loser.modData as Record<string, unknown>).__forcedFace
+      : undefined;
+    const finalFace =
+      face ??
+      (forced as DivineBeast | undefined) ??
+      loser.availableBeasts[Math.floor(this.random.next() * loser.availableBeasts.length)];
 
     this.emit({ type: 'DICE_ROLLED', playerId: loserId, face: finalFace });
 
@@ -312,7 +418,14 @@ export class RoundManager {
     if (result.isDead) {
       loser.isDead = true;
       this.emit({ type: 'PLAYER_DIED', playerId: loserId });
+      // 让 mod 有机会用「不灭」复活 + 挂「末命」
       this.hook('onPlayerDied', this.state, loser);
+      // 若 mod 把 isDead 改回 false，给玩家挂「末命」并增加存活时间
+      if (!loser.isDead) {
+        if (!loser.stateEffectIds?.includes('momming')) {
+          loser.stateEffectIds = [...(loser.stateEffectIds ?? []), 'momming'];
+        }
+      }
     }
 
     this.hook('onAfterLifeDeath', this.state, loser, !result.isDead);
@@ -326,7 +439,9 @@ export class RoundManager {
       return;
     }
 
-    const survivorId = result.isDead ? this.getOtherAlivePlayer(loserId) : loserId;
+    const survivorId = result.isDead && loser.isDead
+      ? this.getOtherAlivePlayer(loserId)
+      : loserId;
     if (survivorId) {
       this.state.activePlayerId = survivorId;
       this.emit({ type: 'NEXT_ACTIVE_PLAYER', playerId: survivorId });
@@ -335,6 +450,55 @@ export class RoundManager {
     this.state.phase = GamePhase.DRAWING;
     this.hook('onBigRoundEnd', this.state, this.state.currentRound);
     this.startRound();
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // 模组相关辅助
+  // ────────────────────────────────────────────────────────────
+
+  /** 玩家是否携带指定状态 */
+  hasState(player: Player, stateId: string): boolean {
+    return (player.stateEffectIds ?? []).includes(stateId);
+  }
+
+  /** 移除玩家身上的某个状态 */
+  clearState(player: Player, stateId: string): void {
+    player.stateEffectIds = (player.stateEffectIds ?? []).filter((s) => s !== stateId);
+    if (player.modData && (player.modData as Record<string, unknown>).stateDurations) {
+      delete (player.modData as Record<string, unknown>).stateDurations[stateId];
+    }
+  }
+
+  /** 给玩家挂状态（mod 友好入口） */
+  addState(player: Player, stateId: string, rounds = 1): void {
+    if (!player.stateEffectIds?.includes(stateId)) {
+      player.stateEffectIds = [...(player.stateEffectIds ?? []), stateId];
+    }
+    if (!player.modData) player.modData = {};
+    const dur = (player.modData as Record<string, unknown>).stateDurations as
+      | Record<string, number>
+      | undefined;
+    (player.modData as Record<string, unknown>).stateDurations = { ...(dur ?? {}), [stateId]: rounds };
+  }
+
+  /**
+   * 使用回响（mod 提供的 useEcho）：扣除 1 次使用次数并返回 {ok, reason}
+   * 失败时由 UI 决定弹什么提示
+   */
+  useEcho(player: Player, echoId: string): { ok: boolean; reason?: string } {
+    const mod = this.modLoader?.getById('huixiang');
+    if (!mod || typeof (mod as Record<string, unknown>).useEcho !== 'function') {
+      return { ok: false, reason: 'no_mod' };
+    }
+    return ((mod as Record<string, unknown>).useEcho as (p: Player, id: string) => {
+      ok: boolean;
+      reason?: string;
+    })(player, echoId);
+  }
+
+  /** 当前 mod 注册的所有回响（供 UI 列表面板使用） */
+  listEchoes() {
+    return this.modLoader?.listEchoes() ?? [];
   }
 
   private getOtherAlivePlayer(excludeId: string): string | undefined {

@@ -480,6 +480,181 @@
   justify-content: center;
 }
 
+/* ────────── 模组扩展：激发回合 / 回响 / 状态徽章 ────────── */
+
+.state-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0;
+}
+.state-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: rgba(196, 30, 58, 0.18);
+  color: #c41e3a;
+  border: 1px solid rgba(196, 30, 58, 0.35);
+}
+
+.echo-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0;
+}
+.echo-chip {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: rgba(46, 139, 139, 0.18);
+  color: #2e8b8b;
+  border: 1px solid rgba(46, 139, 139, 0.35);
+}
+.echo-chip small {
+  opacity: 0.6;
+  margin-left: 2px;
+}
+
+.inspire-phase {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+.inspire-phase h2 {
+  color: var(--accent);
+  margin: 0;
+}
+.inspire-players {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+.inspire-player {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.inspire-player.dead {
+  opacity: 0.45;
+}
+.inspire-player-name {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.inspire-echoes {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.inspire-echoes li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.echo-panel {
+  position: relative;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.echo-panel-body {
+  margin-top: 8px;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+}
+.echo-feedback {
+  font-size: 12px;
+  color: var(--accent);
+  margin: 0 0 6px 0;
+}
+.echo-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.echo-group.muted {
+  opacity: 0.55;
+}
+.echo-group ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.echo-group li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.echo-group button {
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: inherit;
+}
+.echo-group button:hover {
+  border-color: var(--accent);
+}
+.echo-disabled {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--code-bg);
+  border: 1px dashed var(--border);
+}
+.echo-effect {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.echo-target-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.echo-target-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  min-width: 240px;
+}
+.echo-target-card ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 /* 对局记录 */
 .game-log {
   display: flex;

@@ -64,6 +64,7 @@ export interface GameState {
 
 export type GameEvent =
   | { type: 'GAME_STARTED'; players: Player[] }
+  | { type: 'INSPIRE_PHASE_STARTED'; phaseId: string }
   | { type: 'FIRST_PLAYER_ELECTED'; playerId: string }
   | { type: 'ROUND_STARTED'; round: number }
   | { type: 'CARDS_DRAWN'; playerId: string; count: number }

@@ -48,6 +48,7 @@ export type RoundType = typeof RoundType[keyof typeof RoundType];
 // ==================== 游戏阶段 ====================
 export const GamePhase = {
   WAITING: 'waiting',         // 等待开始
+  INSPIRING: 'inspiring',     // 激发回合（mod 扩展）
   ELECTION: 'election',       // 选举
   DRAWING: 'drawing',         // 抽牌
   TRUTH_DECLARE: 'truth',     // 真牌宣告

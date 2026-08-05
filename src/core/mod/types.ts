@@ -230,6 +230,14 @@ export interface ModLoader {
   getActiveMods(): GameMod[];
   getById(id: string): GameMod | undefined;
 
+  // 供 UI 读取的注册表
+  getStateRegistry(): PlayerStateRegistry;
+  getPhaseRegistry(): PhaseRegistry;
+  getEchoRegistry(): EchoRegistry;
+  listEchoes(): EchoDefinition[];
+  listStates(): PlayerStateEffect[];
+  listPhases(): PhaseDefinition[];
+
   // 批量应用补丁
   applyDeckPatches(base: Card[]): Card[];
   applyRulePatches(engine: RuleEngine): RuleEngine;
