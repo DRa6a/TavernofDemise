@@ -29,5 +29,5 @@
       }
     ]
   },
-  "script": "function setup(api) {\n  api.log('sample mod loaded');\n  api.ui.register('game:header-extra', function (ctx) {\n    return {\n      $$typeof: undefined,\n      type: 'span',\n      props: { className: 'mod-sample-badge', children: '[sample]' },\n    };\n  });\n}\n\nfunction onGameStart(state) {\n  /* 进入游戏时的初始化逻辑 */\n}\n"
+  "script": "function setup(api) {\n  api.log('sample mod loaded');\n  api.ui.register('game:header-extra', function (ctx) {\n    return api.h('span', { className: 'mod-sample-badge' }, '[sample]');\n  });\n}\n\nfunction onGameStart(state) {\n  /* 进入游戏时的初始化逻辑 */\n}\n"
 }
