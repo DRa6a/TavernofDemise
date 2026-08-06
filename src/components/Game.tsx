@@ -7,7 +7,6 @@ import { GameLog } from './GameLog';
 import { TablePlay } from './TablePlay';
 import { DiceDraw } from './DiceDraw';
 import { TruthBanner } from './TruthBanner';
-import { ModLogPanel } from './ModLogPanel';
 import { GameOverOverlay } from './GameOverOverlay';
 import { DeathOverlay } from './DeathOverlay';
 import { ModSlot } from '../core/mod/ui-slots';
@@ -83,7 +82,6 @@ export function Game() {
         </div>
         <div className="header-right">
           <ModSlot slot="game:header-extra" />
-          <ModLogPanel />
           <button type="button" className="btn-text" onClick={() => setLogOpen((v) => !v)}>
             {logOpen ? '收起记录' : '对局记录'}
           </button>

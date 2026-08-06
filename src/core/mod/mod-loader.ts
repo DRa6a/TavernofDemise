@@ -37,7 +37,7 @@ import { registerSlot, unregisterSlot } from './ui-slots';
 import type { ModSlotId, SlotRenderFn } from './api';
 import {
   ModLogBuffer,
-  silentLogger,
+  createConsoleLogger,
   type ModLogEntry,
   type ModLogLevel,
   type ModLogListener,
@@ -48,7 +48,7 @@ export class DefaultModLoader implements ModLoader {
   private stateRegistry: PlayerStateRegistry = new DefaultPlayerStateRegistry();
   private phaseRegistry: PhaseRegistry = new DefaultPhaseRegistry();
   private abilityRegistry: AbilityRegistry = new DefaultAbilityRegistry();
-  /** 日志缓冲：默认 silent，调用方通过 setLogSink / setLogLevel 控制输出 */
+  /** 日志缓冲：默认 sink 直接走浏览器 console，调用方可改 sink / 级别 */
   private logBuffer: ModLogBuffer = new ModLogBuffer();
   /** 状态为 mod 提供 currentState（每个 hook 前由 RoundManager 注入） */
   private currentState: GameState | null = null;
@@ -56,11 +56,13 @@ export class DefaultModLoader implements ModLoader {
   private slotRegistrations: Array<{ id: ModSlotId; fn: SlotRenderFn; modId: string }> = [];
 
   constructor(logger?: (msg: string, ...args: unknown[]) => void) {
-    // 向后兼容：旧代码可能传入字符串 logger——把它包成 silent sink（不输出到 console）
+    // 优先级：
+    // 1. 显式传入的旧式 logger（包成 silent sink，只调它）
+    // 2. 否则用默认的「按级别路由到 console」的 sink —— 基座不再 silent
     if (logger) {
       this.logBuffer.setLogger((_level, message, args) => logger(message, ...args));
     } else {
-      this.logBuffer.setLogger(silentLogger);
+      this.logBuffer.setLogger(createConsoleLogger('info'));
     }
   }
 

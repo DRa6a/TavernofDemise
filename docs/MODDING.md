@@ -193,7 +193,10 @@ interface ModApi {
 }
 ```
 
-> `api.log(...)` 走基座的 `ModLogBuffer`，**默认不输出到 console**——所有日志条目进入缓冲，UI 通过「模组日志」面板读取，并可由用户切换级别。`api.log.debug / .warn / .error` 同理。详见 §11。
+> `api.log(...)` 默认走 `createConsoleLogger('info')`——按 level 路由到
+> `console.error / console.warn / console.log`，并同时写入 `ModLogBuffer`
+> 供其它消费者（UI 面板、调试器、订阅）使用。需要换 sink / 改级别 / 清空
+> 时，调用 `loader.setLogSink / setLogLevel / clearLog`。详见 §11。
 
 ### 4.0 写 UI：`api.h`（无 JSX 也能用）
 
@@ -443,11 +446,13 @@ mod 调 `api.phase.complete()` 后：
 
 ---
 
-## 11. 模组日志系统（受控的日志输出）
+## 11. 模组日志（默认输出到浏览器 console）
 
-> 基座**不再直接** `console.log` 任何 mod 相关消息。所有日志统一进入一个
-> **可被 UI 读取的环形缓冲**（`ModLogBuffer`），由玩家在「模组日志」面板里
-> 自行决定是否查看、以及以什么级别查看。
+> 基座不再维护「模组日志」UI 面板。`api.log(...)` 默认直接打到 **浏览器
+> console**（按 level 路由：error → `console.error`，warn → `console.warn`，
+> 其它 → `console.log`），并同时写入一个**可被其它消费者订阅的环形缓冲**
+>（`ModLogBuffer`）。UI / 调试器等需要做面板、过滤、导出时，再去读缓冲或
+> 订阅即可。
 
 ### 11.1 写在 mod 里
 
@@ -460,23 +465,22 @@ api.log.warn('数值越界', n);         // warn 级别
 api.log.error('onBeforePlay 抛错', e); // error 级别
 ```
 
-无论用哪一种，mod 都只是把「一条日志条目」**塞进** ModLogBuffer。
-是否真正输出到 console 取决于 UI 端的级别设置（见下）。
+默认行为：**立即**输出到浏览器 console，并写入 ModLogBuffer（便于日后读取 / 订阅）。
 
 ### 11.2 日志级别
 
-| 级别 | 含义 | 何时会输出 |
+| 级别 | 含义 | 默认 sink 走哪个 console |
 |:---|:---|:---|
-| `silent` | 静默 | 永远不输出（缓冲仍然记录，但不会进入 console sink） |
-| `error` | 错误 | 只有 error |
-| `warn` | 警告 | error + warn |
-| `info` | 信息（默认） | error + warn + info |
-| `debug` | 调试 | 全部 |
+| `debug` | 调试 | `console.log` |
+| `info`（默认） | 信息 | `console.log` |
+| `warn` | 警告 | `console.warn` |
+| `error` | 错误 | `console.error` |
+| `silent` | 静默 | （不进 console） |
 
 ### 11.3 谁来消费
 
-基座默认提供一个 **silent sink**——什么都不做。调用方（一般是 UI / 启动脚本）
-通过 `ModLoader` 的 API 决定如何消费：
+基座 `DefaultModLoader` 默认装一个 `createConsoleLogger('info')`——按级别路由
+到 `console.*`。调用方可以替换 sink、清缓冲、改级别，或者订阅实时增量：
 
 ```ts
 // 1) 拉历史
@@ -485,15 +489,16 @@ const entries = loader.getLogEntries();   // ModLogEntry[]
 // 2) 订阅实时
 const off = loader.subscribeLog((entry) => {
   // entry: { ts, level, source, message, args }
-  console.log(`[${entry.source}] ${entry.message}`);
+  // 自定义面板 / 落盘 / 转发给后端 都走这里
 });
 
 // 3) 切换级别
 loader.setLogLevel('debug');   // 'silent' | 'error' | 'warn' | 'info' | 'debug'
 
-// 4) 替换 sink：把日志打到 console（带 level 路由）
-loader.setLogSink(createConsoleLogger('info'));
-//   createConsoleLogger: error→console.error, warn→console.warn, 其它→console.log
+// 4) 替换 sink
+loader.setLogSink(createConsoleLogger('debug'));     // 走 console，按 level 路由
+loader.setLogSink(silentLogger);                      // 静默（缓冲仍然记录）
+loader.setLogSink((level, message, args) => mySink(level, message, args));
 
 // 5) 清空
 loader.clearLog();
@@ -501,22 +506,21 @@ loader.clearLog();
 
 基座的 `DefaultModLoader` 已经实现了上述 API（见 `ModLoader` 接口）。
 
-### 11.4 UI 面板
+### 11.4 没有「模组日志」UI 面板
 
-游戏内 / 开始界面的右上角都带一个「模组日志 (n)」按钮：
-- 点击展开抽屉，显示当前缓冲里的全部条目（带时间、来源、消息）
-- 顶部下拉切换级别（默认 `info`）
-- 「清空」按钮可清空缓冲
-- 实时滚动到底部
-
-缓冲最多保留 200 条；超出时按 FIFO 丢弃最早条目。
+旧版本里开始界面 / 游戏 header 上的「模组日志」按钮已经移除。打开浏览器
+DevTools 的 Console 面板就能看到全部 mod 输出。需要 UI 面板的 mod / 调试
+工具自己通过 `subscribeLog` 实现。
 
 ### 11.5 设计要点
 
-1. **基座不强加 console 行为**：基座源码里不写 `console.log`；由 UI / 调用方注入 sink。
-2. **级别只控制 sink，不影响缓冲**：UI 把级别调到 `silent` 时，缓冲仍然记录，**只是不再打到 console**——方便后期「复现」问题。
+1. **基座不维护日志 UI**：sink + 缓冲都暴露给调用方，由调用方决定怎么消费。
+2. **默认 sink 是 console，但缓冲与订阅独立**：即使 `setLogSink(silentLogger)`，
+   `getLogEntries()` / `subscribeLog` 仍然能拿到全部历史——方便后期接入
+   「模组日志」面板 / 导出。
 3. **订阅是 fire-and-forget**：订阅者抛错不影响其它订阅者；ModLogBuffer 会捕获并吞掉。
 4. **历史可回放**：通过 `getLogEntries()` 拿到的是**当前缓冲的快照**（不是引用），订阅适用于实时增量。
+5. **缓冲最多保留 200 条**；超出时按 FIFO 丢弃最早条目。
 
 ---
 
@@ -549,7 +553,7 @@ api.phase.useAbility?.(player.id, 'tannang', target?.id);
 // 读当前 state
 const truth = api.state?.truthPhase;
 
-// 受控日志（不直接 console.log；详见 §11）
+// 受控日志（默认走 console；详见 §11）
 api.log('普通信息');
 api.log.debug('调试信息');
 api.log.warn('警告');

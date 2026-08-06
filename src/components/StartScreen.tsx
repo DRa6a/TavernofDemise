@@ -2,7 +2,6 @@ import { useRef, useState } from 'react';
 import type { PlayerConfig } from '../core/models/types';
 import { HUMAN_ID, useGameStore } from '../store/game-store';
 import { ModSlot } from '../core/mod/ui-slots';
-import { ModLogPanel } from './ModLogPanel';
 
 interface StartScreenProps {
   onStart: (configs: PlayerConfig[]) => void;
@@ -128,10 +127,6 @@ export function StartScreen({ onStart }: StartScreenProps) {
             ))}
           </ul>
         )}
-
-        <div className="mod-log-startscreen">
-          <ModLogPanel />
-        </div>
       </section>
 
       <div className="start-options">
