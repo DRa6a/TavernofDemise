@@ -824,6 +824,53 @@
   margin-top: 4px;
 }
 
+/* 「从 URL 加载多文件 mod 工程」输入行 */
+.mod-loader-project {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.mod-loader-project-input {
+  flex: 1 1 240px;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: clamp(12px, 1.7vw, 14px);
+}
+
+/* 单个 mod 行内的元信息（协议 / 仓库） */
+.mod-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: clamp(11px, 1.6vw, 13px);
+  color: var(--text);
+  margin-top: 2px;
+}
+
+.mod-license {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--code-bg);
+  white-space: nowrap;
+}
+
+.mod-repo {
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.mod-repo:hover {
+  text-decoration: underline;
+}
+
 /* 神兽抽卡 */
 .dice-pool {
   display: flex;

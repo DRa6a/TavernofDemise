@@ -1,0 +1,28 @@
+{
+  "format": "tavern-mod",
+  "formatVersion": 1,
+  "manifest": {
+    "id": "echo-demo",
+    "name": "回响示例（多文件工程）",
+    "version": "0.1.0",
+    "author": "base",
+    "description": "展示 scriptPath + 多文件 mod 工程：用一个真 .ts 文件写脚本，IDE 给出完整类型补全。",
+    "license": "MIT",
+    "repo": "https://github.com/zhongyan-tavern/echo-demo"
+  },
+  "info": "# echo-demo\n\n这是一个**多文件** mod 工程的示例 manifest。\n\n脚本写在 `script.js`（由 `script.ts` 用 tsc 编译得到）里，IDE 会用\n`tavern-mod-api.d.ts` 提供 `setup(api)` 的完整类型补全。\n\n加载方式：把这个目录通过任意 HTTP 静态服务器跑起来，然后在「模组管理」\n页的「从 URL 加载多文件 mod 工程」输入框里贴 manifest URL 即可。\n",
+  "data": {
+    "abilities": [
+      {
+        "id": "echo",
+        "name": "回响",
+        "shortName": "回响",
+        "trigger": "play-phase",
+        "maxUses": 1,
+        "effect": "演示能力：在 console 打印一段话。"
+      }
+    ]
+  },
+  "script": "",
+  "scriptPath": "./script.js"
+}

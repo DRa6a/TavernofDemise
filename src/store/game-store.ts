@@ -5,6 +5,7 @@ import { SeededRandom } from '../core/engine/random';
 import { GamePhase } from '../utils/constants';
 import type { Card, DivineBeast, GameState, Player, PlayerConfig } from '../core/models/types';
 import { DefaultModLoader, loadModFromString } from '../core/mod/mod-loader';
+import { loadModPackageFromUrl } from '../core/mod/package-loader';
 import type {
   AbilityDefinition,
   GameMod,
@@ -18,6 +19,8 @@ interface LoadedMod {
   version: string;
   author?: string;
   description?: string;
+  license?: string | { name: string; url?: string };
+  repo?: string;
   errors: string[];
 }
 
@@ -58,6 +61,8 @@ interface GameStore {
 
   /** 从 URL 加载一个 .mod 文件 */
   loadModFromUrl: (url: string, source?: string) => Promise<LoadedMod | null>;
+  /** 从 URL 加载 mod manifest（支持 scriptPath 引用外部脚本） */
+  loadModProjectFromUrl: (url: string) => Promise<LoadedMod | null>;
   /** 从字符串加载（通常来自 <input type="file">） */
   loadModFromString: (raw: string, source: string) => LoadedMod;
   /** 卸载指定 mod */
@@ -225,6 +230,58 @@ export const useGameStore = create<GameStore>((set, get) => {
       }
     },
 
+    /**
+     * 从 URL 加载「多文件 mod 工程」：先抓 manifest，再按 scriptPath
+     * 抓外部脚本。这种工程结构允许作者用真 `.ts`/`.js` 写代码、享受 IDE 补全。
+     */
+    loadModProjectFromUrl: async (url) => {
+      try {
+        const res = await loadModPackageFromUrl(url);
+        if (!res.ok) {
+          const failed: LoadedMod = {
+            id: '',
+            name: url,
+            version: '',
+            errors: res.errors,
+          };
+          set((s) => ({ loadedMods: [...s.loadedMods, failed] }));
+          return failed;
+        }
+        let loader = get().modLoader;
+        if (!loader) loader = new DefaultModLoader();
+        loader.register(res.mod);
+        const m: GameMod = res.mod;
+        const entry: LoadedMod = {
+          id: m.id,
+          name: m.name,
+          version: m.version,
+          author: m.author,
+          description: m.description,
+          license: m.license,
+          repo: m.repo,
+          errors: [],
+        };
+        set((s) => ({
+          modLoader: loader,
+          loadedMods: s.loadedMods.some((x) => x.id === m.id)
+            ? s.loadedMods
+            : [...s.loadedMods, entry],
+          abilityDefs: loader!.listAbilities(),
+          stateDefs: loader!.listStates(),
+        }));
+        return entry;
+      } catch (e) {
+        const failed: LoadedMod = {
+          id: '',
+          name: url,
+          version: '',
+          errors: [`加载失败：${(e as Error).message}`],
+        };
+        set((s) => ({ loadedMods: [...s.loadedMods, failed] }));
+        return failed;
+      }
+    },
+
     loadModFromString: (raw, source) => {
       let loader = get().modLoader;
       if (!loader) {
@@ -252,6 +309,8 @@ export const useGameStore = create<GameStore>((set, get) => {
         version: m.version,
         author: m.author,
         description: m.description,
+        license: m.license,
+        repo: m.repo,
         errors: [],
       };
       set((s) => ({

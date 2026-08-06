@@ -34,6 +34,13 @@ export interface ModPackageAsset {
 /**
  * 模组包：base loader 解析的根对象。
  * 通过 JSON.stringify 后写入 `.mod` 文件。
+ *
+ * 两种 script 写法（任选其一）：
+ * - `script` 字段：把源码作为字符串内嵌进 JSON。简单、便于单文件分发。
+ * - `scriptPath` 字段：相对 manifest 的 URL 引用一个 `.js` 文件。
+ *   推荐——可以让作者用真 `.ts` / `.js` 文件写脚本（IDE 完整补全），
+ *   再用 tsc/esbuild 等构建出 `.js` 后跟 manifest 一起发布。
+ *   两者都存在时优先用 `script`。
  */
 export interface ModPackage {
   /** 必须为 MOD_PACKAGE_MAGIC，用于快速识别 */
@@ -46,8 +53,14 @@ export interface ModPackage {
   info: string;
   /** 注册到游戏的结构化数据 */
   data: ModData;
-  /** 钩子与辅助函数源码（JavaScript 字符串） */
+  /** 钩子与辅助函数源码（JavaScript 字符串），与 scriptPath 二选一 */
   script: string;
+  /**
+   * 可选：相对 manifest URL 的 script 文件路径（如 "./dist/script.js"）。
+   * 仅当从 URL 加载 mod 时有效；浏览器里通过 `<input type="file">` 选文件时
+   * 无法跟随路径，所以本地分发请把 `script` 内嵌进来。
+   */
+  scriptPath?: string;
   /** 可选资源 */
   assets?: ModPackageAsset[];
 }

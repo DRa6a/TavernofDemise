@@ -6,7 +6,9 @@
     "name": "示例模组",
     "version": "0.1.0",
     "author": "base",
-    "description": "最小化的 mod 模板，演示 setup + 数据注册 + UI 注入。"
+    "description": "最小化的 mod 模板，演示 setup + 数据注册 + UI 注入。",
+    "license": "MIT",
+    "repo": "https://github.com/zhongyan-tavern/sample-mod"
   },
   "info": "# 示例模组\n\n展示 mod API 的最小集。\n",
   "data": {

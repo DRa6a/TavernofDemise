@@ -147,3 +147,52 @@ export function loadModPackageFromString(
   if (!mod) return { ok: false, errors: ['组装 GameMod 失败'] };
   return { ok: true, mod, pkg: r.package };
 }
+
+/**
+ * 一行调用：从 URL 抓取 manifest，再按需抓取 `scriptPath` 指向的外部脚本。
+ * 用于「多文件 mod 工程」：mod 作者用真 `.ts`/`.js` 写脚本（IDE 完整补全），
+ * 再把构建产物跟 manifest 一起通过 HTTP 提供。
+ *
+ * 浏览器无法跟随本地文件系统的相对路径——`<input type="file">` 选文件时
+ * 只能拿到单个 .mod 文件。这种情况下请把 `script` 内嵌进 manifest。
+ */
+export async function loadModPackageFromUrl(
+  manifestUrl: string,
+): Promise<{ ok: true; mod: GameMod; pkg: ModPackage } | { ok: false; errors: string[] }> {
+  let manifestText: string;
+  try {
+    const res = await fetch(manifestUrl);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    manifestText = await res.text();
+  } catch (e) {
+    return { ok: false, errors: [`抓取 manifest 失败：${(e as Error).message}`] };
+  }
+
+  const r = parseModPackageJson(manifestText);
+  if (r.errors.length > 0) return { ok: false, errors: r.errors };
+
+  // 决定最终用哪个 script
+  let script = r.package.script;
+  if ((!script || script.trim() === '') && r.package.scriptPath) {
+    try {
+      const scriptUrl = new URL(r.package.scriptPath, manifestUrl).toString();
+      const res = await fetch(scriptUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      script = await res.text();
+    } catch (e) {
+      return { ok: false, errors: [`抓取 script 失败：${(e as Error).message}`] };
+    }
+  }
+  if (!script || script.trim() === '') {
+    return { ok: false, errors: ['mod 既无 script 也无 scriptPath（或两者都为空）'] };
+  }
+
+  // 重新解析一次以注入最终 script
+  const pkg: ModPackage = { ...r.package, script };
+  // 复用 hooks（重新 parse 也可，这里直接重新执行）
+  const fresh = parseModPackageJson(JSON.stringify(pkg));
+  if (fresh.errors.length > 0) return { ok: false, errors: fresh.errors };
+  const mod = buildModFromPackage(fresh);
+  if (!mod) return { ok: false, errors: ['组装 GameMod 失败'] };
+  return { ok: true, mod, pkg: fresh.package };
+}

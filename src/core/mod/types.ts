@@ -226,6 +226,19 @@ export interface ModManifest {
   tags?: string[];
   /** 优先级（数值越大越先应用，负数表示更后） */
   priority?: number;
+
+  /**
+   * 开源协议。
+   * - 字符串：推荐填 [SPDX 标识符](https://spdx.org/licenses/)（如 "MIT"、"GPL-3.0-or-later"、"Apache-2.0"）
+   * - 对象：自定义协议（`name` 必填，`url` 可选指向协议全文）
+   *
+   * 注意：协议字段是 mod 作者的**声明**——基座只把它展示给玩家看，不做任何法律校验。
+   */
+  license?: string | { name: string; url?: string };
+  /** 项目主页 / 仓库地址（展示用，可点击跳转） */
+  repo?: string;
+  /** 协议全文（可选；不填则建议在 repo 里放一份 LICENSE 文件） */
+  licenseText?: string;
 }
 
 /** 模组主接口：metadata + 钩子 + 数据 + 补丁 */

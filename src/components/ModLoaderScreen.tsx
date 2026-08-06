@@ -7,13 +7,22 @@ interface ModLoaderScreenProps {
   onBack: () => void;
 }
 
+type LoadedModLicense = string | { name: string; url?: string };
+
+function formatLicense(license: LoadedModLicense): string {
+  if (typeof license === 'string') return license;
+  return license.name;
+}
+
 export function ModLoaderScreen({ onBack }: ModLoaderScreenProps) {
   const [modStatus, setModStatus] = useState<string | null>(null);
+  const [projectUrl, setProjectUrl] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadedMods = useGameStore((s) => s.loadedMods);
   const loadModFromString = useGameStore((s) => s.loadModFromString);
   const loadModFromUrl = useGameStore((s) => s.loadModFromUrl);
+  const loadModProjectFromUrl = useGameStore((s) => s.loadModProjectFromUrl);
   const unloadMod = useGameStore((s) => s.unloadMod);
   const unloadAllMods = useGameStore((s) => s.unloadAllMods);
 
@@ -51,6 +60,19 @@ export function ModLoaderScreen({ onBack }: ModLoaderScreenProps) {
     }
   }
 
+  async function handleLoadProject() {
+    const url = projectUrl.trim();
+    if (!url) return;
+    setModStatus(null);
+    const entry = await loadModProjectFromUrl(url);
+    if (entry && entry.errors.length === 0) {
+      setModStatus(`✓ 已加载：${entry.name} v${entry.version}`);
+    } else if (entry) {
+      setModStatus(`✗ 加载失败：${entry.errors.join('；')}`);
+    }
+    setProjectUrl('');
+  }
+
   function handleUnload(modId: string) {
     unloadMod(modId);
     setModStatus(null);
@@ -75,7 +97,7 @@ export function ModLoaderScreen({ onBack }: ModLoaderScreenProps) {
 
       <p className="mod-loader-hint">
         加载模组可向游戏中注入新能力、状态、机制。模组由 mod 作者维护，基座不预装任何模组。
-        请查阅 <code>docs/MODDING.md</code> 了解 API 与插槽。
+        请查阅 <code>docs/MODDING.md</code> 了解 API、协议、编辑器配置与多文件工程结构。
       </p>
 
       {/* 模组自身可通过 mod-loader:actions 槽注入额外的「加载按钮」 */}
@@ -87,7 +109,7 @@ export function ModLoaderScreen({ onBack }: ModLoaderScreenProps) {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".mod,.json,.md,text/markdown,text/plain,application/json"
+          accept=".mod,.json"
           onChange={handleFileChange}
           style={{ display: 'none' }}
         />
@@ -106,6 +128,24 @@ export function ModLoaderScreen({ onBack }: ModLoaderScreenProps) {
             全部卸载
           </button>
         )}
+      </div>
+
+      <div className="mod-loader-project">
+        <input
+          type="text"
+          value={projectUrl}
+          onChange={(e) => setProjectUrl(e.target.value)}
+          placeholder="从 URL 加载多文件 mod 工程（manifest URL）"
+          className="mod-loader-project-input"
+        />
+        <button
+          type="button"
+          onClick={handleLoadProject}
+          className="btn-secondary"
+          disabled={!projectUrl.trim()}
+        >
+          加载
+        </button>
       </div>
 
       {modStatus && <p className="mod-status">{modStatus}</p>}
@@ -128,6 +168,23 @@ export function ModLoaderScreen({ onBack }: ModLoaderScreenProps) {
                     <strong>✓ {m.name}</strong> <small>v{m.version}</small>
                     {m.author && <small> · {m.author}</small>}
                     {m.description && <p className="mod-desc">{m.description}</p>}
+                    <div className="mod-meta">
+                      {m.license && (
+                        <span className="mod-license" title="开源协议">
+                          📄 {formatLicense(m.license as LoadedModLicense)}
+                        </span>
+                      )}
+                      {m.repo && (
+                        <a
+                          className="mod-repo"
+                          href={m.repo}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          🔗 仓库
+                        </a>
+                      )}
+                    </div>
                     <button type="button" className="btn-ghost" onClick={() => handleUnload(m.id)}>
                       卸载
                     </button>
@@ -142,3 +199,4 @@ export function ModLoaderScreen({ onBack }: ModLoaderScreenProps) {
     </div>
   );
 }
+
