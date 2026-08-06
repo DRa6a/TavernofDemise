@@ -6,8 +6,13 @@
 //   4. 把 hooks + package 包装成 GameMod 供 mod-loader 注册
 //
 // 本文件不依赖任何 mod 业务概念（echo / state / phase 等），完全是通用扩展。
+//
+// 加载入口（统一）：
+//   - loadModPackage({ text, baseUrl? })   ← 核心解析器，所有入口走它
+//   - loadModPackageFromText(text, baseUrl?) ← 便捷：纯文本（file input 用）
+//   - loadModPackageFromUrl(url)            ← 便捷：HTTP 抓 manifest
 
-import type { ModPackage, ModPackageLoadResult } from './package';
+import type { ModPackage } from './package';
 import { MOD_PACKAGE_MAGIC, MOD_PACKAGE_VERSION } from './package';
 import type { GameMod, ModHooks, ModManifest } from './types';
 
@@ -30,24 +35,49 @@ const KNOWN_HOOKS: (keyof ModHooks)[] = [
   'onBigRoundEnd',
 ];
 
+export interface LoadModPackageOptions {
+  /** 模组 manifest 文本（必填） */
+  text: string;
+  /**
+   * 模组 manifest 的「基址」URL。
+   * - 提供时：若 manifest.script 为空且声明了 scriptPath，会按 baseUrl 拼出绝对 URL
+   *   去 fetch 外部脚本（多文件 mod 工程的标准加载方式）。
+   * - 省略/null：从 <input type="file"> 选文件时，浏览器无法跟随相对路径。
+   *   这种情况下若 manifest.script 为空，会返回明确错误提示作者内联 script。
+   */
+  baseUrl?: string | null;
+  /**
+   * 自定义抓取器（默认 `fetch`）。测试或离线环境可注入。
+   */
+  fetchImpl?: typeof fetch;
+}
+
+export interface LoadModPackageResult {
+  ok: boolean;
+  mod?: GameMod;
+  pkg?: ModPackage;
+  errors: string[];
+}
+
 /**
- * 解析一段 JSON 文本为 ModPackage。失败时返回 errors 列表。
+ * 核心入口：解析一份 manifest 文本，得到 GameMod。
+ * 所有加载路径（URL、file input、字符串）最终都走这里。
  */
-export function parseModPackageJson(jsonText: string): ModPackageLoadResult {
+export async function loadModPackage(
+  opts: LoadModPackageOptions,
+): Promise<LoadModPackageResult> {
   const errors: string[] = [];
+
+  // 1) 解析 manifest
   let pkg: ModPackage;
   try {
-    const obj = JSON.parse(jsonText) as Partial<ModPackage>;
+    const obj = JSON.parse(opts.text) as Partial<ModPackage>;
     pkg = obj as ModPackage;
   } catch (e) {
-    return {
-      package: undefined as unknown as ModPackage,
-      hooks: {},
-      errors: [`JSON 解析失败：${(e as Error).message}`],
-    };
+    return { ok: false, errors: [`JSON 解析失败：${(e as Error).message}`] };
   }
 
-  // magic + version
+  // 2) 校验 magic / version / 必填 manifest 字段
   if (pkg.format !== MOD_PACKAGE_MAGIC) {
     errors.push(`format 必须是 "${MOD_PACKAGE_MAGIC}"，当前为 ${JSON.stringify(pkg.format)}`);
   }
@@ -56,33 +86,117 @@ export function parseModPackageJson(jsonText: string): ModPackageLoadResult {
       `formatVersion 必须是 ${MOD_PACKAGE_VERSION}，当前为 ${JSON.stringify(pkg.formatVersion)}`,
     );
   }
-
-  // manifest
   const m: Partial<ModManifest> = pkg.manifest ?? {};
   if (!m.id) errors.push('manifest.id 缺失');
   if (!m.name) errors.push('manifest.name 缺失');
   if (!m.version) errors.push('manifest.version 缺失');
 
-  // info / data / script 容错（缺省给空）
+  if (errors.length > 0) {
+    return { ok: false, pkg, errors };
+  }
+
+  // 3) 容错补全可选字段
   pkg.info = typeof pkg.info === 'string' ? pkg.info : '';
   pkg.data = pkg.data ?? {};
   pkg.script = typeof pkg.script === 'string' ? pkg.script : '';
   pkg.assets = Array.isArray(pkg.assets) ? pkg.assets : [];
 
-  // 执行 script
-  const hooks: Record<string, unknown> = {};
-  if (pkg.script.trim().length > 0) {
+  // 4) 决定最终 script 来源
+  let script = pkg.script;
+  const scriptPath = typeof pkg.scriptPath === 'string' ? pkg.scriptPath.trim() : '';
+
+  if ((!script || script.trim() === '') && scriptPath) {
+    if (!opts.baseUrl) {
+      errors.push(
+        'mod 既无内联 script、又声明了 scriptPath，但加载时未提供 baseUrl。' +
+          '浏览器无法跟随本地文件相对路径——请把 script 内联进 manifest，或通过 HTTP URL 加载。',
+      );
+      return { ok: false, pkg, errors };
+    }
     try {
-      Object.assign(hooks, runScript(pkg.script, errors));
+      const scriptUrl = new URL(scriptPath, opts.baseUrl).toString();
+      const fetchFn = opts.fetchImpl ?? fetch;
+      const res = await fetchFn(scriptUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      script = await res.text();
     } catch (e) {
-      errors.push(`script 执行失败：${(e as Error).message}`);
+      return {
+        ok: false,
+        pkg,
+        errors: [`抓取 script 失败（${scriptPath}）：${(e as Error).message}`],
+      };
     }
   }
 
-  return { package: pkg, hooks, errors };
+  if (!script || script.trim() === '') {
+    return {
+      ok: false,
+      pkg,
+      errors: ['mod 既无 script 也无 scriptPath（或两者都为空）'],
+    };
+  }
+
+  // 5) 在 sandbox 中执行 script，挂到 exports
+  const hooks: Record<string, unknown> = {};
+  try {
+    Object.assign(hooks, runScript(script));
+  } catch (e) {
+    return { ok: false, pkg, errors: [`script 执行失败：${(e as Error).message}`] };
+  }
+
+  // 6) 校验钩子签名
+  for (const hookName of KNOWN_HOOKS) {
+    if (typeof hooks[hookName] !== 'function' && typeof hooks[hookName] !== 'undefined') {
+      errors.push(`script: ${hookName} 必须为函数，得到 ${typeof hooks[hookName]}`);
+    }
+  }
+
+  if (errors.length > 0) {
+    return { ok: false, pkg, errors };
+  }
+
+  // 7) 组装 GameMod
+  const mod: GameMod = {
+    id: m.id!,
+    name: m.name!,
+    version: m.version!,
+    author: m.author,
+    description: m.description,
+    dependsOn: m.dependsOn,
+    tags: m.tags,
+    priority: m.priority,
+    data: pkg.data,
+    ...hooks,
+  } as GameMod;
+
+  return { ok: true, mod, pkg, errors: [] };
 }
 
-function runScript(script: string, errors: string[]): Record<string, unknown> {
+/** 便捷：纯文本入口（file input 用） */
+export function loadModPackageFromText(
+  text: string,
+  baseUrl?: string | null,
+): Promise<LoadModPackageResult> {
+  return loadModPackage({ text, baseUrl: baseUrl ?? null });
+}
+
+/**
+ * 便捷：URL 入口（HTTP/HTTPS 静态服务器用）。
+ * 先抓 manifest，再以 manifest URL 为 baseUrl 解析 scriptPath。
+ */
+export async function loadModPackageFromUrl(manifestUrl: string): Promise<LoadModPackageResult> {
+  let text: string;
+  try {
+    const res = await fetch(manifestUrl);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    text = await res.text();
+  } catch (e) {
+    return { ok: false, errors: [`抓取 manifest 失败：${(e as Error).message}`] };
+  }
+  return loadModPackage({ text, baseUrl: manifestUrl });
+}
+
+function runScript(script: string): Record<string, unknown> {
   // 预转换：把 TypeScript 方法简写 `name(args) {` 转为 `function name(args) {`
   const knownPattern = KNOWN_HOOKS.join('|');
   const transformed = script.replace(
@@ -108,91 +222,5 @@ function runScript(script: string, errors: string[]): Record<string, unknown> {
   const exports: Record<string, unknown> = {};
   factory(exports);
 
-  // 验证钩子签名
-  for (const hookName of KNOWN_HOOKS) {
-    if (typeof exports[hookName] !== 'function' && typeof exports[hookName] !== 'undefined') {
-      errors.push(`script: ${hookName} 必须为函数，得到 ${typeof exports[hookName]}`);
-    }
-  }
-
   return exports;
-}
-
-/** 把 parseModPackageJson 的结果组装成 GameMod */
-export function buildModFromPackage(result: ModPackageLoadResult): GameMod | null {
-  if (result.errors.length > 0) return null;
-  const { package: pkg, hooks } = result;
-  const m = pkg.manifest;
-  return {
-    id: m.id,
-    name: m.name,
-    version: m.version,
-    author: m.author,
-    description: m.description,
-    dependsOn: m.dependsOn,
-    tags: m.tags,
-    priority: m.priority,
-    data: pkg.data,
-    ...hooks,
-  } as GameMod;
-}
-
-/** 一行调用：字符串 → GameMod 或 errors */
-export function loadModPackageFromString(
-  jsonText: string,
-): { ok: true; mod: GameMod; pkg: ModPackage } | { ok: false; errors: string[] } {
-  const r = parseModPackageJson(jsonText);
-  if (r.errors.length > 0) return { ok: false, errors: r.errors };
-  const mod = buildModFromPackage(r);
-  if (!mod) return { ok: false, errors: ['组装 GameMod 失败'] };
-  return { ok: true, mod, pkg: r.package };
-}
-
-/**
- * 一行调用：从 URL 抓取 manifest，再按需抓取 `scriptPath` 指向的外部脚本。
- * 用于「多文件 mod 工程」：mod 作者用真 `.ts`/`.js` 写脚本（IDE 完整补全），
- * 再把构建产物跟 manifest 一起通过 HTTP 提供。
- *
- * 浏览器无法跟随本地文件系统的相对路径——`<input type="file">` 选文件时
- * 只能拿到单个 .mod 文件。这种情况下请把 `script` 内嵌进 manifest。
- */
-export async function loadModPackageFromUrl(
-  manifestUrl: string,
-): Promise<{ ok: true; mod: GameMod; pkg: ModPackage } | { ok: false; errors: string[] }> {
-  let manifestText: string;
-  try {
-    const res = await fetch(manifestUrl);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    manifestText = await res.text();
-  } catch (e) {
-    return { ok: false, errors: [`抓取 manifest 失败：${(e as Error).message}`] };
-  }
-
-  const r = parseModPackageJson(manifestText);
-  if (r.errors.length > 0) return { ok: false, errors: r.errors };
-
-  // 决定最终用哪个 script
-  let script = r.package.script;
-  if ((!script || script.trim() === '') && r.package.scriptPath) {
-    try {
-      const scriptUrl = new URL(r.package.scriptPath, manifestUrl).toString();
-      const res = await fetch(scriptUrl);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      script = await res.text();
-    } catch (e) {
-      return { ok: false, errors: [`抓取 script 失败：${(e as Error).message}`] };
-    }
-  }
-  if (!script || script.trim() === '') {
-    return { ok: false, errors: ['mod 既无 script 也无 scriptPath（或两者都为空）'] };
-  }
-
-  // 重新解析一次以注入最终 script
-  const pkg: ModPackage = { ...r.package, script };
-  // 复用 hooks（重新 parse 也可，这里直接重新执行）
-  const fresh = parseModPackageJson(JSON.stringify(pkg));
-  if (fresh.errors.length > 0) return { ok: false, errors: fresh.errors };
-  const mod = buildModFromPackage(fresh);
-  if (!mod) return { ok: false, errors: ['组装 GameMod 失败'] };
-  return { ok: true, mod, pkg: fresh.package };
 }

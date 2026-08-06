@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadModPackageFromString } from '../package-loader';
+import { loadModPackage } from '../package-loader';
 import { DefaultModLoader } from '../mod-loader';
 import { GamePhase } from '../../../utils/constants';
 import type { GameState, Player } from '../../models/types';
@@ -42,21 +42,21 @@ function makeState(): GameState {
 }
 
 describe('调试 mod (debug.mod)', () => {
-  it('应能解析为合法包并暴露 setup/teardown', () => {
+  it('应能解析为合法包并暴露 setup/teardown', async () => {
     const raw = readFileSync(join(process.cwd(), 'public/mods/debug.mod'), 'utf-8');
-    const res = loadModPackageFromString(raw);
+    const res = await loadModPackage({ text: raw });
     expect(res.ok).toBe(true);
-    if (!res.ok) return;
+    if (!res.ok || !res.mod) return;
     expect(res.mod.id).toBe('debug');
     expect(typeof (res.mod as unknown as { setup?: unknown }).setup).toBe('function');
     expect(typeof (res.mod as unknown as { teardown?: unknown }).teardown).toBe('function');
   });
 
-  it('setup 注册 UI 并构造 debug api 调用，渲染函数可返回 React 元素', () => {
+  it('setup 注册 UI 并构造 debug api 调用，渲染函数可返回 React 元素', async () => {
     const raw = readFileSync(join(process.cwd(), 'public/mods/debug.mod'), 'utf-8');
-    const res = loadModPackageFromString(raw);
+    const res = await loadModPackage({ text: raw });
     expect(res.ok).toBe(true);
-    if (!res.ok) return;
+    if (!res.ok || !res.mod) return;
 
     // 用真实的 DefaultModLoader：基座会构造完整 api
     const loader = new DefaultModLoader();

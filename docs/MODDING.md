@@ -5,7 +5,7 @@
 > 2. 知道怎么注册能力 / 状态 / 阶段、怎么注入 UI、怎么响应游戏事件；
 > 3. 选一个合适的开源协议，附在 mod 里。
 >
-> 如果你只想「点一下就玩」，不需要看这份文档——基座会自带 `debug.mod` 演示调试能力，`sample.mod` / `echo-demo` 演示 API。
+> 如果你只想「点一下就玩」，不需要看这份文档——基座会自带 `debug.mod` / `sample.mod` / `echo-demo` 一键加载按钮。
 
 ---
 
@@ -56,7 +56,17 @@
 
 ### 1.2 加载
 
-打开基座 →「管理模组…」→「从本地 .mod 加载…」→ 选 `hello.mod`。成功后：
+打开基座 →「管理模组…」→ 看到 4 种入口：
+
+| 入口 | 何时用 |
+|:---|:---|
+| **加载调试 mod** | 内置 `debug.mod`（翻开牌/改手牌等调试能力） |
+| **加载示例 mod** | 内置 `sample.mod`（演示 license / repo 字段） |
+| **加载回响示例（多文件）** | 内置 `echo-demo`（演示 `scriptPath` 多文件工程） |
+| **从本地 .mod 加载…** | 自己选一个 `.mod` JSON 文件（要求 `script` 内联） |
+| **从 URL 加载** | 任意 HTTP 上的 manifest（支持 `scriptPath`） |
+
+成功加载后：
 
 - 「已加载」列表里多出一行
 - 进对局后，游戏 header 右侧出现一个 `[hello]` 徽章
@@ -66,6 +76,25 @@
 
 模组管理页里点行末的「卸载」即可——它注册的 UI 槽会自动清理。
 
+### 1.4 重要：基座如何识别「多文件 mod 工程」
+
+基座的 mod 加载器**只有一个核心入口** [`loadModPackage({text, baseUrl})`](../src/core/mod/package-loader.ts)：
+
+```
+loadModPackageFromUrl(url)  ──┐
+                              ├──→  loadModPackage({text, baseUrl})  →  GameMod
+loadModPackageFromText(text) ─┘                ↑
+                                          baseUrl=url（URL 加载）
+                                          baseUrl=null（file input，不能跟随相对路径）
+```
+
+`baseUrl` 决定是否能解析 `scriptPath`：
+
+- **URL 加载**（自带 mod 按钮 / 「从 URL 加载」）：`baseUrl = manifest URL`，会自动按 `scriptPath` 抓外部脚本
+- **本地 file input**（「从本地 .mod 加载…」）：`baseUrl = null`，浏览器无法跟随相对路径——若 manifest 用 `scriptPath` 会报清晰错误并提示改用内联
+
+如果你看到「mod 既无内联 script、又声明了 scriptPath，但加载时未提供 baseUrl」——就是这个原因。改成「从 URL 加载」即可。
+
 ---
 
 ## 2. 两种开发模式：单文件 vs 多文件工程
@@ -74,14 +103,14 @@
 
 | 维度 | 单文件 `.mod` | 多文件 mod 工程 |
 |:---|:---|:---|
-| 结构 | 整个 mod 在**一个** JSON 文件里，`script` 是字符串 | `manifest.json`（或 `.mod`）+ 真实 `.ts`/`.js` 文件 |
+| 结构 | 整个 mod 在**一个** JSON 文件里，`script` 是字符串 | `manifest.json` + 真实 `.ts`/`.js` 文件 |
 | 编辑器补全 | ❌ `script` 字段是 JSON 字符串，IDE 当作无类型数据 | ✅ 用 `tavern-mod-api.d.ts` 拿到 `setup(api)` 完整类型 |
+| 加载方式 | 「从本地 .mod 加载…」/「从 URL 加载」 | 必须「从 URL 加载」（需要 baseUrl 解析 scriptPath） |
 | 适合 | 极简 mod / 一次性示例 / 教学 | 真正的工程（多文件、import、ts 类型） |
-| 分发 | 单文件即可（`script` 内嵌） | 需要 HTTP 服务器或打包成 zip |
 
 **推荐**：哪怕只写 50 行代码，也用多文件模式——`script.ts` 写代码，IDE 全功能可用；构建产物 `script.js` 跟 `manifest.json` 一起放。
 
-完整的多文件示例在 `public/mods/echo-demo/`，含 `manifest.json` / `script.ts` / `script.js` / `tsconfig.json` / `README.md`，按 `npx tsc` 就能构建。
+完整的多文件示例在 `public/mods/echo-demo/`，含 `manifest.json` / `script.ts` / `script.js` / `tavern-mod-api.d.ts` / `tsconfig.json` / `README.md`，按 `npx tsc` 就能构建。
 
 ---
 
@@ -552,6 +581,9 @@ api.log.error('错误', err);     // error
 | `JSON 解析失败` | `.mod` 顶部有 `//` 注释 | 删掉，纯 JSON |
 | `format 必须是 "tavern-mod"` | 漏了 `format` 字段 | 加上 |
 | `manifest.id 缺失` | 漏了 `id` | 加上 |
+| `mod 既无 script 也无 scriptPath` | 两个都为空 | 加一个 |
+| `mod 既无内联 script、又声明了 scriptPath，但加载时未提供 baseUrl` | file input 模式加载了多文件 mod | 改用「从 URL 加载」或把 `script` 内联进 manifest |
+| `抓取 script 失败` | manifest URL 找不到 scriptPath 指向的文件 | 检查路径/服务器 |
 | `Objects are not valid as a React child` | render 用了 `{$$typeof, type, props}` 而不是 `api.h(...)` | 改用 `api.h` |
 | UI 不显示 | `api.ui.register` 不在 `setup(api)` 里 | 挪进去 |
 
@@ -587,9 +619,9 @@ const off = loader.subscribeLog((entry) => {
 
 ### 13.1 单文件 mod
 
-把 `hello.mod` 单文件发出去即可——玩家在「模组管理」里选文件加载。
+把 `hello.mod` 单文件发出去即可——玩家在「模组管理」里用「从本地 .mod 加载…」按钮选文件加载。**注意：单文件必须把 `script` 内联进 manifest，不能用 `scriptPath`（浏览器无法跟随本地相对路径）。**
 
-### 13.2 多文件 mod
+### 13.2 多文件 mod 工程
 
 把整个 mod 目录放到任意 HTTP 静态服务器，发布 `manifest.json` 的 URL。
 
@@ -603,7 +635,7 @@ gh repo create     # 或者手动 push 到 GitHub
 gh pages enable    # 开启 Pages
 ```
 
-然后基座从 `https://you.github.io/your-mod/manifest.json` 加载。
+然后基座从 `https://you.github.io/your-mod/manifest.json` 加载——UI 上的「从 URL 加载」输入框贴这个 URL 即可。
 
 ### 13.3 打包成 zip
 

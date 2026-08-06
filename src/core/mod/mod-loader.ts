@@ -25,8 +25,6 @@ import {
   DefaultPhaseRegistry,
   DefaultPlayerStateRegistry,
 } from './registry';
-import { loadModPackageFromString } from './package-loader';
-import { parseModFile } from './parser';
 import type {
   DebugApi,
   ModApi,
@@ -490,37 +488,5 @@ export class DefaultModLoader implements ModLoader {
 // ────────────────────────────────────────────────────────────
 // 工具
 // ────────────────────────────────────────────────────────────
-
-/**
- * 一行加载：从字符串（.mod JSON 文件 或 .mod.md 文件）解析并注册。
- * 推荐用法——所有 mod 都应走这条路径。
- *
- * 自动识别：
- * - 内容以 `---` 开头 → 旧版 .mod.md 解析器
- * - 否则按 .mod JSON 包处理
- */
-export function loadModFromString(
-  loader: ModLoader,
-  raw: string,
-  _source: string = '<inline>',
-): { ok: boolean; errors: string[]; mod?: GameMod } {
-  const trimmed = raw.trimStart();
-  if (trimmed.startsWith('---')) {
-    // 旧版 .mod.md：通过 parseModFile 解析
-    const result = parseModFile(raw, _source);
-    if (result.errors.length > 0 || !result.mod) {
-      return { ok: false, errors: result.errors, mod: undefined };
-    }
-    loader.register(result.mod);
-    return { ok: true, errors: [], mod: result.mod };
-  }
-  // 新版 .mod JSON
-  const res = loadModPackageFromString(raw);
-  if (!res.ok) {
-    return { ok: false, errors: res.errors, mod: undefined };
-  }
-  loader.register(res.mod);
-  return { ok: true, errors: [], mod: res.mod };
-}
 
 export type { ModManifest };

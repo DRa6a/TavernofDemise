@@ -4,10 +4,20 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseModFile } from '../parser';
-import { loadModFromString, DefaultModLoader } from '../mod-loader';
+import { DefaultModLoader } from '../mod-loader';
 import { SeededRandom } from '../../engine/random';
 import { RoundManager } from '../../engine/round-manager';
 import { BaseStrategy } from '../../ai/base-strategy';
+
+/** 旧 .mod.md 路径的便捷加载器：parseModFile + register 合并到 ModLoader */
+function loadHuixiang(loader: DefaultModLoader, raw: string) {
+  const result = parseModFile(raw, 'docs/回响.md');
+  if (result.errors.length > 0 || !result.mod) {
+    throw new Error('parseModFile errors: ' + result.errors.join('; '));
+  }
+  loader.register(result.mod);
+  return result.mod;
+}
 
 describe('回响模组 (.mod 格式)', () => {
   // 解析 docs/回响.md（兼容旧 .mod.md 解析器）
@@ -41,8 +51,7 @@ describe('回响模组 (.mod 格式)', () => {
 
   it('应能加载到 ModLoader 并启动游戏', () => {
     const loader = new DefaultModLoader();
-    const res = loadModFromString(loader, raw, 'docs/回响.md');
-    expect(res.ok).toBe(true);
+    loadHuixiang(loader, raw);
 
     const rm = new RoundManager({ random: new SeededRandom(7), modLoader: loader });
     rm.startGame([
@@ -59,7 +68,7 @@ describe('回响模组 (.mod 格式)', () => {
 
   it('completeInspirePhase 后每位玩家获得 3 个回响', () => {
     const loader = new DefaultModLoader();
-    loadModFromString(loader, raw, 'docs/回响.md');
+    loadHuixiang(loader, raw);
     const rm = new RoundManager({ random: new SeededRandom(7), modLoader: loader });
     rm.startGame([
       { id: 'p1', name: '玩家1', isHuman: false },
@@ -76,7 +85,7 @@ describe('回响模组 (.mod 格式)', () => {
 
   it('ModLoader 暴露 abilityDefs / stateDefs', () => {
     const loader = new DefaultModLoader();
-    loadModFromString(loader, raw, 'docs/回响.md');
+    loadHuixiang(loader, raw);
     expect(loader.listAbilities()).toHaveLength(34);
     expect(loader.listStates()).toHaveLength(8);
     expect(loader.listPhases()).toHaveLength(1);

@@ -4,8 +4,8 @@ import { BaseStrategy } from '../core/ai/base-strategy';
 import { SeededRandom } from '../core/engine/random';
 import { GamePhase } from '../utils/constants';
 import type { Card, DivineBeast, GameState, Player, PlayerConfig } from '../core/models/types';
-import { DefaultModLoader, loadModFromString } from '../core/mod/mod-loader';
-import { loadModPackageFromUrl } from '../core/mod/package-loader';
+import { DefaultModLoader } from '../core/mod/mod-loader';
+import { loadModPackageFromText, loadModPackageFromUrl } from '../core/mod/package-loader';
 import type {
   AbilityDefinition,
   GameMod,
@@ -59,12 +59,19 @@ interface GameStore {
   setRevealAll: (value: boolean) => void;
   runAiLoop: () => void;
 
-  /** 从 URL 加载一个 .mod 文件 */
-  loadModFromUrl: (url: string, source?: string) => Promise<LoadedMod | null>;
-  /** 从 URL 加载 mod manifest（支持 scriptPath 引用外部脚本） */
-  loadModProjectFromUrl: (url: string) => Promise<LoadedMod | null>;
-  /** 从字符串加载（通常来自 <input type="file">） */
-  loadModFromString: (raw: string, source: string) => LoadedMod;
+  /**
+   * 从 URL 加载一个 mod（单文件 .mod 或多文件 mod 工程的 manifest）。
+   * 自动识别 scriptPath：若 manifest.script 为空且声明了 scriptPath，
+   * 会按 manifest URL 拼出 script 绝对 URL 并 fetch。
+   */
+  loadModFromUrl: (url: string, source?: string) => Promise<LoadedMod>;
+  /**
+   * 从字符串加载 mod（通常来自 <input type="file">）。
+   * - baseUrl 提供时支持 scriptPath（多文件 mod 工程通过 HTTP 分发的场景）
+   * - baseUrl 省略时（典型如 file input），scriptPath 不被解析（浏览器无
+   *   法跟随本地相对路径），会要求作者把 script 内联进 manifest
+   */
+  loadModFromText: (raw: string, source: string, baseUrl?: string | null) => Promise<LoadedMod>;
   /** 卸载指定 mod */
   unloadMod: (modId: string) => void;
   /** 卸载全部 mod */
@@ -107,6 +114,51 @@ export const useGameStore = create<GameStore>((set, get) => {
   // 把 store 挂到 globalThis，让 mod（脱离 React 上下文）也能调到 store 方法
   // （PhaseController 转发到这里）
   // 必须在 set/get 回调里再写一遍，因为 useGameStore.getState() 还没就绪
+  /**
+   * 内部助手：把 loadModPackage 的结果落地（注册到 loader + 更新 loadedMods）。
+   * 成功：返回 LoadedMod（errors=[]）；失败：返回带 errors 的 LoadedMod，并把失败
+   * 条目追加到 loadedMods 让 UI 看到。
+   */
+  const registerLoadedMod = (
+    source: string,
+    result: import('../core/mod/package-loader').LoadModPackageResult,
+  ): LoadedMod => {
+    let loader = get().modLoader;
+    if (!loader) loader = new DefaultModLoader();
+
+    if (!result.ok || !result.mod) {
+      const failed: LoadedMod = {
+        id: '',
+        name: source,
+        version: '',
+        errors: result.errors,
+      };
+      set((s) => ({ modLoader: loader, loadedMods: [...s.loadedMods, failed] }));
+      return failed;
+    }
+    loader.register(result.mod);
+    const m: GameMod = result.mod;
+    const entry: LoadedMod = {
+      id: m.id,
+      name: m.name,
+      version: m.version,
+      author: m.author,
+      description: m.description,
+      license: m.license,
+      repo: m.repo,
+      errors: [],
+    };
+    set((s) => ({
+      modLoader: loader,
+      loadedMods: s.loadedMods.some((x) => x.id === m.id)
+        ? s.loadedMods
+        : [...s.loadedMods, entry],
+      abilityDefs: loader!.listAbilities(),
+      stateDefs: loader!.listStates(),
+    }));
+    return entry;
+  };
+
   return {
     manager: null,
     gameState: null,
@@ -211,117 +263,25 @@ export const useGameStore = create<GameStore>((set, get) => {
       get().runAiLoop();
     },
 
+    /**
+     * 从 URL 加载一个 mod（单文件 .mod 或多文件 mod 工程的 manifest）。
+     * 自动识别 scriptPath：若 manifest.script 为空且声明了 scriptPath，
+     * 会按 manifest URL 拼出 script 绝对 URL 并 fetch。
+     */
     loadModFromUrl: async (url, source) => {
-      try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const text = await res.text();
-        const entry = get().loadModFromString(text, source ?? url);
-        return entry;
-      } catch (e) {
-        const failed: LoadedMod = {
-          id: '',
-          name: url,
-          version: '',
-          errors: [`加载失败：${(e as Error).message}`],
-        };
-        set((s) => ({ loadedMods: [...s.loadedMods, failed] }));
-        return failed;
-      }
+      const result = await loadModPackageFromUrl(url);
+      return registerLoadedMod(source ?? url, result);
     },
 
     /**
-     * 从 URL 加载「多文件 mod 工程」：先抓 manifest，再按 scriptPath
-     * 抓外部脚本。这种工程结构允许作者用真 `.ts`/`.js` 写代码、享受 IDE 补全。
+     * 从字符串加载 mod（通常来自 <input type="file">）。
+     * - baseUrl 提供时支持 scriptPath（多文件 mod 工程通过 HTTP 分发的场景）
+     * - baseUrl 省略时（典型如 file input），scriptPath 不被解析（浏览器无
+     *   法跟随本地相对路径），会要求作者把 script 内联进 manifest
      */
-    loadModProjectFromUrl: async (url) => {
-      try {
-        const res = await loadModPackageFromUrl(url);
-        if (!res.ok) {
-          const failed: LoadedMod = {
-            id: '',
-            name: url,
-            version: '',
-            errors: res.errors,
-          };
-          set((s) => ({ loadedMods: [...s.loadedMods, failed] }));
-          return failed;
-        }
-        let loader = get().modLoader;
-        if (!loader) loader = new DefaultModLoader();
-        loader.register(res.mod);
-        const m: GameMod = res.mod;
-        const entry: LoadedMod = {
-          id: m.id,
-          name: m.name,
-          version: m.version,
-          author: m.author,
-          description: m.description,
-          license: m.license,
-          repo: m.repo,
-          errors: [],
-        };
-        set((s) => ({
-          modLoader: loader,
-          loadedMods: s.loadedMods.some((x) => x.id === m.id)
-            ? s.loadedMods
-            : [...s.loadedMods, entry],
-          abilityDefs: loader!.listAbilities(),
-          stateDefs: loader!.listStates(),
-        }));
-        return entry;
-      } catch (e) {
-        const failed: LoadedMod = {
-          id: '',
-          name: url,
-          version: '',
-          errors: [`加载失败：${(e as Error).message}`],
-        };
-        set((s) => ({ loadedMods: [...s.loadedMods, failed] }));
-        return failed;
-      }
-    },
-
-    loadModFromString: (raw, source) => {
-      let loader = get().modLoader;
-      if (!loader) {
-        loader = new DefaultModLoader();
-      }
-      const res = loadModFromString(loader, raw, source);
-
-      if (!res.ok || !res.mod) {
-        const failed: LoadedMod = {
-          id: '',
-          name: source,
-          version: '',
-          errors: res.errors,
-        };
-        set((s) => ({
-          modLoader: loader,
-          loadedMods: [...s.loadedMods, failed],
-        }));
-        return failed;
-      }
-      const m: GameMod = res.mod;
-      const entry: LoadedMod = {
-        id: m.id,
-        name: m.name,
-        version: m.version,
-        author: m.author,
-        description: m.description,
-        license: m.license,
-        repo: m.repo,
-        errors: [],
-      };
-      set((s) => ({
-        modLoader: loader,
-        loadedMods: s.loadedMods.some((x) => x.id === m.id)
-          ? s.loadedMods
-          : [...s.loadedMods, entry],
-        abilityDefs: loader!.listAbilities(),
-        stateDefs: loader!.listStates(),
-      }));
-      return entry;
+    loadModFromText: async (raw, source, baseUrl) => {
+      const result = await loadModPackageFromText(raw, baseUrl);
+      return registerLoadedMod(source, result);
     },
 
     unloadMod: (modId) => {
