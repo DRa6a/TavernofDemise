@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useGameStore, HUMAN_ID } from '../store/game-store';
 import { StartScreen } from './StartScreen';
+import { ModLoaderScreen } from './ModLoaderScreen';
 import { PlayerSeat } from './PlayerSeat';
 import { ActionPanel } from './ActionPanel';
 import { GameLog } from './GameLog';
@@ -12,7 +13,11 @@ import { DeathOverlay } from './DeathOverlay';
 import { ModSlot } from '../core/mod/ui-slots';
 import { GamePhase } from '../utils/constants';
 
+/** 顶层视图：开始界面 / 模组管理 / 对局 */
+type View = 'start' | 'mod-loader';
+
 export function Game() {
+  const [view, setView] = useState<View>('start');
   const [logOpen, setLogOpen] = useState(false);
   const [deathOverlay, setDeathOverlay] = useState<{ show: boolean; name: string } | null>(null);
   const [gameOverOverlay, setGameOverOverlay] = useState<{ show: boolean; name: string } | null>(null);
@@ -59,7 +64,18 @@ export function Game() {
   }, [gameState?.history.length, gameState?.history, gameState?.players]);
 
   if (!gameState) {
-    return <StartScreen onStart={startGame} />;
+    if (view === 'mod-loader') {
+      return <ModLoaderScreen onBack={() => setView('start')} />;
+    }
+    return (
+      <StartScreen
+        onStart={(configs) => {
+          setView('start');
+          startGame(configs);
+        }}
+        onOpenModLoader={() => setView('mod-loader')}
+      />
+    );
   }
 
   const humanPlayer = gameState.players.find((p) => p.id === HUMAN_ID);
@@ -91,6 +107,7 @@ export function Game() {
             onClick={() => {
               if (confirm('确定要重新开始吗？')) {
                 useGameStore.setState({ gameState: null, manager: null, selectedCardIds: [], pendingDiceResult: undefined, revealDelay: false });
+                setView('start');
               }
             }}
           >

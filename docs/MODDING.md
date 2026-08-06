@@ -102,8 +102,8 @@ interface ModPackage {
 
 | 槽 ID | 位置 | 用途 |
 |:---|:---|:---|
-| `start-screen:actions` | 开始界面的「加载按钮」区 | mod 提供自定义的「从远端 / 拖拽」加载入口 |
-| `start-screen:mod-list` | 已加载 mod 列表的每一行 | mod 在每行加自定义操作（开关、配置等） |
+| `mod-loader:actions` | 模组管理界面的「加载按钮」区 | mod 提供自定义的「从远端 / 拖拽」加载入口 |
+| `mod-loader:mod-list` | 模组管理界面：已加载 mod 列表的每一行 | mod 在每行加自定义操作（开关、配置等） |
 | `game:header-extra` | 游戏 header 右侧 | mod 加自定义按钮（菜单、提示、关于） |
 | `player-seat:badges` | 玩家座位上 | mod 在每位玩家旁加自定义徽章（不用「状态」机制） |
 | `player-seat:abilities` | 玩家座位上 | mod 自定义能力条（默认走基座 `AbilityPanel`） |

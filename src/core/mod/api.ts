@@ -24,8 +24,8 @@ import type {
 
 /** 注入槽标识。所有槽都遵循 `域:子域` 命名。 */
 export type ModSlotId =
-  | 'start-screen:actions'      // StartScreen：模组加载按钮区
-  | 'start-screen:mod-list'     // StartScreen：已加载模组列表的自定义行
+  | 'mod-loader:actions'        // ModLoaderScreen：模组加载按钮区
+  | 'mod-loader:mod-list'       // ModLoaderScreen：已加载模组列表的自定义行
   | 'game:header-extra'         // Game header 右侧的额外按钮
   | 'player-seat:badges'        // 玩家座位上的状态徽章
   | 'player-seat:abilities'     // 玩家座位上的能力条
