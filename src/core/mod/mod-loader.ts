@@ -5,6 +5,7 @@
 // 1. 包加载（package-loader）解析 JSON，拿到 ModPackage
 // 2. 创建 Default* 注册表，调用 mod 的 setup(api) 注入数据 / UI
 // 3. 把 mod 钩子挂到引擎（RoundManager 通过 triggerHook 调用）
+import { createElement as h } from 'react';
 import type { Card, GameState, Player } from '../models/types';
 import type { RuleEngine } from '../engine/rule-engine';
 import type {
@@ -26,7 +27,12 @@ import {
 } from './registry';
 import { loadModPackageFromString } from './package-loader';
 import { parseModFile } from './parser';
-import type { ModApi, ModScriptExports, PhaseController } from './api';
+import type {
+  DebugApi,
+  ModApi,
+  ModScriptExports,
+  PhaseController,
+} from './api';
 import { registerSlot, unregisterSlot } from './ui-slots';
 import type { ModSlotId, SlotRenderFn } from './api';
 import {
@@ -370,8 +376,47 @@ export class DefaultModLoader implements ModLoader {
       },
     };
 
+    // DebugApi：转发到 game store（通过全局 getter）
+    // 注意：这是「旁路」API，基座自己不读。生产 mod 不应依赖它——仅供
+    // 调试/开发期 mod 用。
+    const debugApi: DebugApi = {
+      setRevealAll: (value) => {
+        const g = (globalThis as unknown as {
+          __tavernStore?: { getState: () => { setRevealAll: (v: boolean) => void } };
+        }).__tavernStore;
+        g?.getState().setRevealAll?.(value);
+      },
+      isRevealAll: () => {
+        const g = (globalThis as unknown as {
+          __tavernStore?: { getState: () => { revealAll: boolean } };
+        }).__tavernStore;
+        return g?.getState().revealAll ?? false;
+      },
+      modifyHand: (playerId, operation) => {
+        const g = (globalThis as unknown as {
+          __tavernStore?: {
+            getState: () => {
+              modifyHand: (
+                p: string,
+                op: 'remove' | { replaceId: string; newCard: Card },
+              ) => void;
+            };
+          };
+        }).__tavernStore;
+        g?.getState().modifyHand?.(playerId, operation);
+      },
+      bumpRender: () => {
+        const g = (globalThis as unknown as {
+          __tavernStore?: { getState: () => { bumpModRender: () => void } };
+        }).__tavernStore;
+        g?.getState().bumpModRender?.();
+      },
+    };
+
     const api: ModApi = {
+      h,
       log: modLogger,
+      debug: debugApi,
       abilities: this.abilityRegistry,
       states: this.stateRegistry,
       phases: this.phaseRegistry,

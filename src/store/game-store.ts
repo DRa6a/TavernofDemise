@@ -47,6 +47,14 @@ interface GameStore {
   /** 订阅 mod 日志（返回 unsubscribe） */
   subscribeModLog: (listener: ModLogListener) => () => void;
 
+  /**
+   * mod UI 槽的「重渲染版本号」。任何 mod 通过 `api.debug.bumpRender()` 调一下，
+   * 所有 `<ModSlot>` 都会重渲染——用于 mod 自己维护闭包 state 时触发更新。
+   */
+  modRenderVersion: number;
+  /** 让所有 mod UI 槽重新渲染（mod 调 api.debug.bumpRender() 走这里） */
+  bumpModRender: () => void;
+
   startGame: (configs: PlayerConfig[]) => void;
   playCards: (cardIds: string[]) => void;
   openPhase: (decision: 'challenge' | 'pass') => void;
@@ -118,6 +126,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     modLoader: null,
     modLogLevel: 'info',
     modLogEntries: [],
+    modRenderVersion: 0,
     abilityDefs: [],
     stateDefs: [],
     abilityPause: null,
@@ -138,6 +147,10 @@ export const useGameStore = create<GameStore>((set, get) => {
       const { modLoader } = get();
       if (!modLoader) return () => undefined;
       return modLoader.subscribeLog(listener);
+    },
+
+    bumpModRender: () => {
+      set((s) => ({ modRenderVersion: s.modRenderVersion + 1 }));
     },
 
     startGame: (configs) => {

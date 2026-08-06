@@ -64,6 +64,8 @@ export function ModSlot({
   humanPlayer: humanOverride,
 }: ModSlotProps): ReactNode {
   const gameState = useGameStore((s) => s.gameState);
+  // 让 mod 可以通过 api.debug.bumpRender() 触发本槽重渲染（用于闭包持有的 local state）
+  const modRenderVersion = useGameStore((s) => s.modRenderVersion);
 
   const ctx = useMemo<SlotRenderContext>(() => {
     const state = stateOverride ?? gameState;
@@ -90,7 +92,8 @@ export function ModSlot({
   return (
     <>
       {renderers.map((fn, i) => (
-        <SlotRenderer key={i} fn={fn} ctx={ctx} />
+        // key 包含 modRenderVersion，使 mod 调 bumpRender 时强制重建 SlotRenderer
+        <SlotRenderer key={`${i}:${modRenderVersion}`} fn={fn} ctx={ctx} />
       ))}
     </>
   );

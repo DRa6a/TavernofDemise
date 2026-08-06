@@ -15,8 +15,11 @@ export function StartScreen({ onStart }: StartScreenProps) {
 
   const loadedMods = useGameStore((s) => s.loadedMods);
   const loadModFromString = useGameStore((s) => s.loadModFromString);
+  const loadModFromUrl = useGameStore((s) => s.loadModFromUrl);
   const unloadMod = useGameStore((s) => s.unloadMod);
   const unloadAllMods = useGameStore((s) => s.unloadAllMods);
+
+  const debugModLoaded = loadedMods.some((m) => m.id === 'debug');
 
   const configs: PlayerConfig[] = Array.from({ length: playerCount }, (_, i) => ({
     id: i === 0 ? HUMAN_ID : `p${i}`,
@@ -40,6 +43,20 @@ export function StartScreen({ onStart }: StartScreenProps) {
     };
     reader.onerror = () => setModStatus(`✗ 读取文件失败`);
     reader.readAsText(file);
+  }
+
+  async function handleLoadDebug() {
+    setModStatus(null);
+    const entry = await loadModFromUrl('/mods/debug.mod', 'debug.mod');
+    if (!entry) {
+      setModStatus('✗ 调试 mod 加载失败：网络错误');
+      return;
+    }
+    if (entry.errors.length === 0) {
+      setModStatus(`✓ 已加载调试 mod：${entry.name} v${entry.version}`);
+    } else {
+      setModStatus(`✗ 调试 mod 加载失败：${entry.errors.join('；')}`);
+    }
   }
 
   return (
@@ -67,6 +84,16 @@ export function StartScreen({ onStart }: StartScreenProps) {
             onChange={handleFileChange}
             style={{ display: 'none' }}
           />
+          {!debugModLoaded && (
+            <button
+              type="button"
+              onClick={handleLoadDebug}
+              className="btn-ghost"
+              title="加载随基座自带的 debug mod（含翻开牌/改手牌等调试能力）"
+            >
+              加载调试 mod
+            </button>
+          )}
           {loadedMods.length > 0 && (
             <button type="button" onClick={unloadAllMods} className="btn-ghost">
               全部卸载

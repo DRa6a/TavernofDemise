@@ -195,6 +195,66 @@ interface ModApi {
 
 > `api.log(...)` 走基座的 `ModLogBuffer`，**默认不输出到 console**——所有日志条目进入缓冲，UI 通过「模组日志」面板读取，并可由用户切换级别。`api.log.debug / .warn / .error` 同理。详见 §11。
 
+### 4.0 写 UI：`api.h`（无 JSX 也能用）
+
+mod 脚本跑在 `new Function` 沙箱里，**没有 JSX 编译**。构造 UI 元素请用 `api.h(type, props, ...children)`，它是 `React.createElement` 的薄包装：
+
+```js
+function setup(api) {
+  api.ui.register('game:header-extra', function (ctx) {
+    return api.h('div', { className: 'my-mod-block' },
+      api.h('span', null, 'hello '),
+      api.h('strong', null, ctx.humanPlayer?.name ?? '?'),
+      api.h('button', {
+        type: 'button',
+        className: 'btn-text',
+        onClick: function () { api.log('clicked'); },
+      }, '点我')
+    );
+  });
+}
+```
+
+> 习惯 JSX 的开发者可以这样想：`api.h('div', { ... }, a, b)` ≈ `<div {...}>{a}{b}</div>`。
+
+`api.h` 在所有 slot 渲染函数里都能用（通过闭包捕获 `api`）。
+
+### 4.0.1 维护 mod 本地 UI state：闭包 + `api.debug.bumpRender()`
+
+mod 的 render 函数每次都会被基座重跑（游戏 state 变化时），所以**不能用** `useState`。
+典型做法：在 `setup` 里用闭包持有 `var open = false`，state 变化时调 `api.debug.bumpRender()`：
+
+```js
+function setup(api) {
+  var open = false;
+  function toggle() { open = !open; api.debug.bumpRender(); }
+
+  api.ui.register('game:header-extra', function () {
+    return api.h('div', null,
+      api.h('button', { onClick: toggle }, open ? '收起' : '展开'),
+      open ? api.h('div', { className: 'panel' }, '内容…') : null
+    );
+  });
+}
+```
+
+`api.debug.bumpRender()` 让所有 `<ModSlot>` 重建——mod 不需要把 state 存到游戏 store 里。
+
+### 4.0.2 旁路：直接改 store（`api.debug.*`）
+
+基座提供一个**调试**子命名空间，绕过正常 UI 协议直接读写 store：
+
+| API | 作用 |
+|:---|:---|
+| `api.debug.setRevealAll(v)` | 翻开/隐藏 所有牌 |
+| `api.debug.isRevealAll()` | 当前是否翻开所有牌 |
+| `api.debug.modifyHand(p, 'remove')` | 移除玩家最后一张手牌 |
+| `api.debug.modifyHand(p, { replaceId, newCard })` | 替换指定 id 的手牌 |
+| `api.debug.bumpRender()` | 让所有 mod UI 槽重渲染（详见上） |
+
+> 调试 mod 用完即弃，**不**要让生产 mod 把它当公共 API。
+> 参考实现见 [public/mods/debug.mod](../../public/mods/debug.mod)（自带「翻开所有牌 / 减少手牌 / 替换相位」三个开关）。
+
 ### 4.1 能力注册表
 
 ```ts
