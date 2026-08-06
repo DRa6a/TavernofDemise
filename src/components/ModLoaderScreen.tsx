@@ -51,6 +51,16 @@ export function ModLoaderScreen({ onBack }: ModLoaderScreenProps) {
     }
   }
 
+  function handleUnload(modId: string) {
+    unloadMod(modId);
+    setModStatus(null);
+  }
+
+  function handleUnloadAll() {
+    unloadAllMods();
+    setModStatus(null);
+  }
+
   return (
     <div className="mod-loader-screen">
       <header className="mod-loader-header">
@@ -92,7 +102,7 @@ export function ModLoaderScreen({ onBack }: ModLoaderScreenProps) {
           </button>
         )}
         {loadedMods.length > 0 && (
-          <button type="button" onClick={unloadAllMods} className="btn-ghost">
+          <button type="button" onClick={handleUnloadAll} className="btn-ghost">
             全部卸载
           </button>
         )}
@@ -118,7 +128,7 @@ export function ModLoaderScreen({ onBack }: ModLoaderScreenProps) {
                     <strong>✓ {m.name}</strong> <small>v{m.version}</small>
                     {m.author && <small> · {m.author}</small>}
                     {m.description && <p className="mod-desc">{m.description}</p>}
-                    <button type="button" className="btn-ghost" onClick={() => unloadMod(m.id)}>
+                    <button type="button" className="btn-ghost" onClick={() => handleUnload(m.id)}>
                       卸载
                     </button>
                   </span>
