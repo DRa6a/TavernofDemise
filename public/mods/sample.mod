@@ -1,5 +1,3 @@
-// 简单模板：演示 mod 如何通过 setup(api) 注册数据 + UI。
-// 基座不依赖此 mod；只用于 sanity check 加载器链路。
 {
   "format": "tavern-mod",
   "formatVersion": 1,
@@ -31,5 +29,5 @@
       }
     ]
   },
-  "script": "// 1) setup：注册数据 / 注入 UI\nfunction setup(api) {\n  api.log('sample mod loaded');\n  api.ui.register('game:header-extra', function (ctx) {\n    return {\n      $$typeof: undefined,\n      type: 'span',\n      props: { className: 'mod-sample-badge', children: '[sample]' },\n    };\n  });\n}\n\n// 2) 通用钩子（可选）\nfunction onGameStart(state) {\n  /* 进入游戏时的初始化逻辑 */\n}\n"
+  "script": "function setup(api) {\n  api.log('sample mod loaded');\n  api.ui.register('game:header-extra', function (ctx) {\n    return {\n      $$typeof: undefined,\n      type: 'span',\n      props: { className: 'mod-sample-badge', children: '[sample]' },\n    };\n  });\n}\n\nfunction onGameStart(state) {\n  /* 进入游戏时的初始化逻辑 */\n}\n"
 }
