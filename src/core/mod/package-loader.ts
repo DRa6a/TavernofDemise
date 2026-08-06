@@ -114,7 +114,10 @@ export async function loadModPackage(
       return { ok: false, pkg, errors };
     }
     try {
-      const scriptUrl = new URL(scriptPath, opts.baseUrl).toString();
+      // baseUrl 可能是相对路径（如 "/mods/echo-demo/manifest.json"），
+      // new URL() 第二个参数需要绝对 URL；用 window.location.origin 兜底。
+      const baseUrl = resolveBaseUrl(opts.baseUrl);
+      const scriptUrl = new URL(scriptPath, baseUrl).toString();
       const fetchFn = opts.fetchImpl ?? fetch;
       const res = await fetchFn(scriptUrl);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -194,6 +197,24 @@ export async function loadModPackageFromUrl(manifestUrl: string): Promise<LoadMo
     return { ok: false, errors: [`抓取 manifest 失败：${(e as Error).message}`] };
   }
   return loadModPackage({ text, baseUrl: manifestUrl });
+}
+
+/**
+ * 把 baseUrl 解析成「new URL() 第二个参数可接受」的绝对 URL。
+ * - 已经是绝对 URL（http/https/...）→ 原样返回
+ * - 相对 URL（"/path" / "path"）→ 用 window.location.origin 拼成绝对
+ */
+function resolveBaseUrl(baseUrl: string): string {
+  try {
+    // 尝试直接构造：如果本来就是绝对 URL，这里不会抛
+    return new URL(baseUrl).toString();
+  } catch {
+    // 相对路径：拼 origin
+    if (typeof window !== 'undefined' && window.location) {
+      return new URL(baseUrl, window.location.href).toString();
+    }
+    return baseUrl;
+  }
 }
 
 function runScript(script: string): Record<string, unknown> {
