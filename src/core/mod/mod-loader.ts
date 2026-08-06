@@ -29,30 +29,84 @@ import { parseModFile } from './parser';
 import type { ModApi, ModScriptExports, PhaseController } from './api';
 import { registerSlot, unregisterSlot } from './ui-slots';
 import type { ModSlotId, SlotRenderFn } from './api';
+import {
+  ModLogBuffer,
+  silentLogger,
+  type ModLogEntry,
+  type ModLogLevel,
+  type ModLogListener,
+} from './log';
 
 export class DefaultModLoader implements ModLoader {
   private mods: GameMod[] = [];
   private stateRegistry: PlayerStateRegistry = new DefaultPlayerStateRegistry();
   private phaseRegistry: PhaseRegistry = new DefaultPhaseRegistry();
   private abilityRegistry: AbilityRegistry = new DefaultAbilityRegistry();
-  private logger: (msg: string, ...args: unknown[]) => void;
+  /** 日志缓冲：默认 silent，调用方通过 setLogSink / setLogLevel 控制输出 */
+  private logBuffer: ModLogBuffer = new ModLogBuffer();
   /** 状态为 mod 提供 currentState（每个 hook 前由 RoundManager 注入） */
   private currentState: GameState | null = null;
   /** 每个 mod 注册的 UI 槽渲染函数，用于卸载时清理 */
   private slotRegistrations: Array<{ id: ModSlotId; fn: SlotRenderFn; modId: string }> = [];
 
   constructor(logger?: (msg: string, ...args: unknown[]) => void) {
-    this.logger = logger ?? ((msg, ...args) => console.log(`[mod] ${msg}`, ...args));
+    // 向后兼容：旧代码可能传入字符串 logger——把它包成 silent sink（不输出到 console）
+    if (logger) {
+      this.logBuffer.setLogger((_level, message, args) => logger(message, ...args));
+    } else {
+      this.logBuffer.setLogger(silentLogger);
+    }
+  }
+
+  private log(level: ModLogLevel, source: string, message: string, ...args: unknown[]): void {
+    const entry: ModLogEntry = {
+      ts: Date.now(),
+      level,
+      source,
+      message,
+      args: args.map((a) => {
+        try {
+          return typeof a === 'string' ? a : JSON.stringify(a);
+        } catch {
+          return String(a);
+        }
+      }),
+    };
+    this.logBuffer.push(entry);
+  }
+
+  getLogBuffer(): ModLogBuffer {
+    return this.logBuffer;
+  }
+
+  setLogLevel(level: ModLogLevel): void {
+    this.logBuffer.setLevel(level);
+  }
+
+  setLogSink(sink: (level: ModLogLevel, message: string, args: unknown[]) => void): void {
+    this.logBuffer.setLogger(sink);
+  }
+
+  getLogEntries(): ModLogEntry[] {
+    return this.logBuffer.getEntries();
+  }
+
+  subscribeLog(listener: ModLogListener): () => void {
+    return this.logBuffer.subscribe(listener);
+  }
+
+  clearLog(): void {
+    this.logBuffer.clear();
   }
 
   register(mod: GameMod): void {
     if (this.mods.find((m) => m.id === mod.id)) {
-      this.logger(`重复注册 mod: ${mod.id}，已忽略`);
+      this.log('warn', 'loader', `重复注册 mod: ${mod.id}，已忽略`);
       return;
     }
     this.mods.push(mod);
     this.mods.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
-    this.logger(`注册 mod: ${mod.id} v${mod.version}`);
+    this.log('info', 'loader', `注册 mod: ${mod.id} v${mod.version}`);
 
     // 1) 把 data.* 注册到默认注册表
     if (mod.data?.states) {
@@ -72,7 +126,7 @@ export class DefaultModLoader implements ModLoader {
       try {
         exports.setup(api);
       } catch (e) {
-        this.logger(`mod ${mod.id} setup 报错：${(e as Error).message}`);
+        this.log('error', 'loader', `mod ${mod.id} setup 报错：${(e as Error).message}`);
       }
     }
 
@@ -82,7 +136,7 @@ export class DefaultModLoader implements ModLoader {
       try {
         mod.onRegister(ctx);
       } catch (e) {
-        this.logger(`mod ${mod.id} onRegister 报错：${(e as Error).message}`);
+        this.log('error', 'loader', `mod ${mod.id} onRegister 报错：${(e as Error).message}`);
       }
     }
   }
@@ -126,11 +180,11 @@ export class DefaultModLoader implements ModLoader {
       try {
         exports.teardown();
       } catch (e) {
-        this.logger(`mod ${modId} teardown 报错：${(e as Error).message}`);
+        this.log('error', 'loader', `mod ${modId} teardown 报错：${(e as Error).message}`);
       }
     }
 
-    this.logger(`注销 mod: ${modId}`);
+    this.log('info', 'loader', `注销 mod: ${modId}`);
   }
 
   getActiveMods(): GameMod[] {
@@ -233,7 +287,7 @@ export class DefaultModLoader implements ModLoader {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (fn as (...a: any[]) => void).apply(mod, args as unknown as any[]);
         } catch (e) {
-          this.logger(`mod ${mod.id} 钩子 ${String(hook)} 报错：${(e as Error).message}`);
+          this.log('error', `mod:${mod.id}`, `钩子 ${String(hook)} 报错：${(e as Error).message}`);
         }
       }
     }
@@ -260,7 +314,24 @@ export class DefaultModLoader implements ModLoader {
 
   private buildApi(modId: string): ModApi {
     const modId_ = modId;
-    const modLogger = (msg: string, ...args: unknown[]) => this.logger(`[${modId_}] ${msg}`, ...args);
+    // mod 的 log(): 走统一缓冲（带 source 标签），由 setLogSink/setLogLevel 控制输出
+    // 同时挂有 .debug / .warn / .error 子方法（mod 可写 api.log.debug(...)）
+    const modLogger: ModApi['log'] = Object.assign(
+      (msg: string, ...args: unknown[]) => {
+        this.log('info', `mod:${modId_}`, msg, ...args);
+      },
+      {
+        debug: (msg: string, ...args: unknown[]) => {
+          this.log('debug', `mod:${modId_}`, msg, ...args);
+        },
+        warn: (msg: string, ...args: unknown[]) => {
+          this.log('warn', `mod:${modId_}`, msg, ...args);
+        },
+        error: (msg: string, ...args: unknown[]) => {
+          this.log('error', `mod:${modId_}`, msg, ...args);
+        },
+      },
+    );
 
     // PhaseController 转发到 game store（通过全局 getter 拿 store）
     const phaseCtrl: PhaseController = {

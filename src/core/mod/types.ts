@@ -6,6 +6,7 @@
 // 只定义 mod 体系的「扩展点」与「数据契约」。具体能力由各 mod 自己定义。
 import type { Card, GameState, Player } from '../models/types';
 import type { RuleEngine } from '../engine/rule-engine';
+import type { ModLogBuffer, ModLogEntry, ModLogLevel, ModLogListener } from './log';
 
 // ────────────────────────────────────────────────────────────
 // 玩家状态（mod 可以注册新状态）
@@ -273,6 +274,20 @@ export interface ModLoader {
   triggerHook(hook: keyof ModHooks, ...args: unknown[]): void;
   /** 由 RoundManager 在每次 hook 前调用，注入最新 state（可选） */
   setCurrentState?(state: GameState | null): void;
+
+  // 日志：基座不再强制 console.log，由调用方决定如何消费
+  /** 获取日志缓冲（历史条目 + 订阅 API） */
+  getLogBuffer(): ModLogBuffer;
+  /** 设置日志级别：'silent' | 'error' | 'warn' | 'info' | 'debug' */
+  setLogLevel(level: ModLogLevel): void;
+  /** 设置日志 sink（默认 silent）。形如 (level, message, args) => void */
+  setLogSink?(sink: (level: ModLogLevel, message: string, args: unknown[]) => void): void;
+  /** 读取历史日志条目 */
+  getLogEntries(): ModLogEntry[];
+  /** 订阅实时日志（返回 unsubscribe 函数） */
+  subscribeLog(listener: ModLogListener): () => void;
+  /** 清空历史 */
+  clearLog?(): void;
 }
 
 // ────────────────────────────────────────────────────────────

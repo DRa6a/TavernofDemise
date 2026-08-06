@@ -153,6 +153,9 @@ mod 在 `setup(api)` 收到 `api: ModApi`：
 ```ts
 interface ModApi {
   log(message: string, ...args: unknown[]): void;
+  log.debug(message, ...args): void;   // debug 级别
+  log.warn(message, ...args): void;    // warn 级别
+  log.error(message, ...args): void;   // error 级别
 
   // 三个注册表（mod 主动注册，基座聚合）
   abilities: AbilityRegistry;
@@ -189,6 +192,8 @@ interface ModApi {
   state: GameState | null;
 }
 ```
+
+> `api.log(...)` 走基座的 `ModLogBuffer`，**默认不输出到 console**——所有日志条目进入缓冲，UI 通过「模组日志」面板读取，并可由用户切换级别。`api.log.debug / .warn / .error` 同理。详见 §11。
 
 ### 4.1 能力注册表
 
@@ -378,6 +383,83 @@ mod 调 `api.phase.complete()` 后：
 
 ---
 
+## 11. 模组日志系统（受控的日志输出）
+
+> 基座**不再直接** `console.log` 任何 mod 相关消息。所有日志统一进入一个
+> **可被 UI 读取的环形缓冲**（`ModLogBuffer`），由玩家在「模组日志」面板里
+> 自行决定是否查看、以及以什么级别查看。
+
+### 11.1 写在 mod 里
+
+`api.log` 是一个既能被当函数调用、又挂了 `.debug / .warn / .error` 子方法的对象：
+
+```ts
+api.log('玩家使用了招灾');           // info 级别
+api.log.debug('调试信息', someValue); // debug 级别
+api.log.warn('数值越界', n);         // warn 级别
+api.log.error('onBeforePlay 抛错', e); // error 级别
+```
+
+无论用哪一种，mod 都只是把「一条日志条目」**塞进** ModLogBuffer。
+是否真正输出到 console 取决于 UI 端的级别设置（见下）。
+
+### 11.2 日志级别
+
+| 级别 | 含义 | 何时会输出 |
+|:---|:---|:---|
+| `silent` | 静默 | 永远不输出（缓冲仍然记录，但不会进入 console sink） |
+| `error` | 错误 | 只有 error |
+| `warn` | 警告 | error + warn |
+| `info` | 信息（默认） | error + warn + info |
+| `debug` | 调试 | 全部 |
+
+### 11.3 谁来消费
+
+基座默认提供一个 **silent sink**——什么都不做。调用方（一般是 UI / 启动脚本）
+通过 `ModLoader` 的 API 决定如何消费：
+
+```ts
+// 1) 拉历史
+const entries = loader.getLogEntries();   // ModLogEntry[]
+
+// 2) 订阅实时
+const off = loader.subscribeLog((entry) => {
+  // entry: { ts, level, source, message, args }
+  console.log(`[${entry.source}] ${entry.message}`);
+});
+
+// 3) 切换级别
+loader.setLogLevel('debug');   // 'silent' | 'error' | 'warn' | 'info' | 'debug'
+
+// 4) 替换 sink：把日志打到 console（带 level 路由）
+loader.setLogSink(createConsoleLogger('info'));
+//   createConsoleLogger: error→console.error, warn→console.warn, 其它→console.log
+
+// 5) 清空
+loader.clearLog();
+```
+
+基座的 `DefaultModLoader` 已经实现了上述 API（见 `ModLoader` 接口）。
+
+### 11.4 UI 面板
+
+游戏内 / 开始界面的右上角都带一个「模组日志 (n)」按钮：
+- 点击展开抽屉，显示当前缓冲里的全部条目（带时间、来源、消息）
+- 顶部下拉切换级别（默认 `info`）
+- 「清空」按钮可清空缓冲
+- 实时滚动到底部
+
+缓冲最多保留 200 条；超出时按 FIFO 丢弃最早条目。
+
+### 11.5 设计要点
+
+1. **基座不强加 console 行为**：基座源码里不写 `console.log`；由 UI / 调用方注入 sink。
+2. **级别只控制 sink，不影响缓冲**：UI 把级别调到 `silent` 时，缓冲仍然记录，**只是不再打到 console**——方便后期「复现」问题。
+3. **订阅是 fire-and-forget**：订阅者抛错不影响其它订阅者；ModLogBuffer 会捕获并吞掉。
+4. **历史可回放**：通过 `getLogEntries()` 拿到的是**当前缓冲的快照**（不是引用），订阅适用于实时增量。
+
+---
+
 ## 附：API 速查表
 
 ```ts
@@ -406,4 +488,10 @@ api.phase.useAbility?.(player.id, 'tannang', target?.id);
 
 // 读当前 state
 const truth = api.state?.truthPhase;
+
+// 受控日志（不直接 console.log；详见 §11）
+api.log('普通信息');
+api.log.debug('调试信息');
+api.log.warn('警告');
+api.log.error('错误');
 ```

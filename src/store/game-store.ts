@@ -11,6 +11,7 @@ import type {
   ModLoader,
   PlayerStateEffect,
 } from '../core/mod/types';
+import type { ModLogEntry, ModLogLevel, ModLogListener } from '../core/mod/log';
 
 interface LoadedMod {
   id: string;
@@ -34,6 +35,17 @@ interface GameStore {
   loadedMods: LoadedMod[];
   /** 共享的 mod 加载器实例 */
   modLoader: ModLoader | null;
+
+  /** 当前 mod 日志级别（控制是否打到 console + 缓冲） */
+  modLogLevel: ModLogLevel;
+  /** 全部 mod 日志条目（按时间顺序） */
+  modLogEntries: ModLogEntry[];
+  /** 设置 mod 日志级别 */
+  setModLogLevel: (level: ModLogLevel) => void;
+  /** 清空 mod 日志 */
+  clearModLog: () => void;
+  /** 订阅 mod 日志（返回 unsubscribe） */
+  subscribeModLog: (listener: ModLogListener) => () => void;
 
   startGame: (configs: PlayerConfig[]) => void;
   playCards: (cardIds: string[]) => void;
@@ -104,9 +116,29 @@ export const useGameStore = create<GameStore>((set, get) => {
     revealAll: false,
     loadedMods: [],
     modLoader: null,
+    modLogLevel: 'info',
+    modLogEntries: [],
     abilityDefs: [],
     stateDefs: [],
     abilityPause: null,
+
+    setModLogLevel: (level) => {
+      const { modLoader } = get();
+      modLoader?.setLogLevel?.(level);
+      set({ modLogLevel: level });
+    },
+
+    clearModLog: () => {
+      const { modLoader } = get();
+      modLoader?.clearLog?.();
+      set({ modLogEntries: [] });
+    },
+
+    subscribeModLog: (listener) => {
+      const { modLoader } = get();
+      if (!modLoader) return () => undefined;
+      return modLoader.subscribeLog(listener);
+    },
 
     startGame: (configs) => {
       const { modLoader } = get();
@@ -218,6 +250,16 @@ export const useGameStore = create<GameStore>((set, get) => {
         loader = new DefaultModLoader();
       }
       const res = loadModFromString(loader, raw, source);
+
+      // 同步日志缓冲：拉取历史 + 订阅新条目 → 写进 store
+      const existingEntries = loader.getLogEntries?.() ?? [];
+      const unsubscribe = loader.subscribeLog?.((entry) => {
+        set((s) => ({ modLogEntries: [...s.modLogEntries, entry] }));
+      });
+      // 把 unsubscribe 挂到 loader 自身（防止反复订阅），下一次加载时清理旧的
+      const prevUnsub = (loader as unknown as { __logUnsub?: () => void }).__logUnsub;
+      prevUnsub?.();
+
       if (!res.ok || !res.mod) {
         const failed: LoadedMod = {
           id: '',
@@ -228,7 +270,9 @@ export const useGameStore = create<GameStore>((set, get) => {
         set((s) => ({
           modLoader: loader,
           loadedMods: [...s.loadedMods, failed],
+          modLogEntries: existingEntries,
         }));
+        (loader as unknown as { __logUnsub?: () => void }).__logUnsub = unsubscribe;
         return failed;
       }
       const m: GameMod = res.mod;
@@ -247,7 +291,9 @@ export const useGameStore = create<GameStore>((set, get) => {
           : [...s.loadedMods, entry],
         abilityDefs: loader!.listAbilities(),
         stateDefs: loader!.listStates(),
+        modLogEntries: existingEntries,
       }));
+      (loader as unknown as { __logUnsub?: () => void }).__logUnsub = unsubscribe;
       return entry;
     },
 

@@ -7,5 +7,6 @@ export * from './api';
 export * from './mod-loader';
 export * from './package';
 export * from './package-loader';
+export * from './log';
 // 旧版 .mod.md 解析器保留为内部兼容入口（不再推荐使用）
 export { parseModFile } from './parser';

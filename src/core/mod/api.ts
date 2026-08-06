@@ -94,7 +94,16 @@ export interface UiApi {
  * - `phase`：控制自定义阻塞阶段
  */
 export interface ModApi {
-  log(message: string, ...args: unknown[]): void;
+  /**
+   * 写一条 mod 日志。走统一 ModLogBuffer，输出由 loader.setLogLevel / setLogSink 控制。
+   * 同时挂有 .debug / .warn / .error 子方法供 mod 选择子级别。
+   */
+  log: {
+    (message: string, ...args: unknown[]): void;
+    debug(message: string, ...args: unknown[]): void;
+    warn(message: string, ...args: unknown[]): void;
+    error(message: string, ...args: unknown[]): void;
+  };
 
   abilities: AbilityRegistry;
   states: PlayerStateRegistry;
